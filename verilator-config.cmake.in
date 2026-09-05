@@ -183,6 +183,13 @@ define_property(
 
 define_property(
     TARGET
+    PROPERTY VERILATOR_TRACE_VTR
+    BRIEF_DOCS "Verilator VTR trace enabled"
+    FULL_DOCS "Verilator VTR trace enabled"
+)
+
+define_property(
+    TARGET
     PROPERTY VERILATOR_SYSTEMC
     BRIEF_DOCS "Verilator SystemC enabled"
     FULL_DOCS "Verilator SystemC enabled"
@@ -259,7 +266,7 @@ endfunction()
 function(verilate TARGET)
     cmake_parse_arguments(
         VERILATE
-        "COVERAGE;SYSTEMC;TRACE_FST;TRACE_SAIF;TRACE_VCD;TRACE;TRACE_STRUCTS"
+        "COVERAGE;SYSTEMC;TRACE_FST;TRACE_SAIF;TRACE_VCD;TRACE_VTR;TRACE;TRACE_STRUCTS"
         "PREFIX;TOP_MODULE;THREADS;TRACE_THREADS;DIRECTORY"
         "SOURCES;VERILATOR_ARGS;INCLUDE_DIRS;OPT_SLOW;OPT_FAST;OPT_GLOBAL"
         ${ARGN}
@@ -333,6 +340,10 @@ function(verilate TARGET)
 
     if(VERILATE_TRACE_VCD)
         list(APPEND VERILATOR_ARGS --trace-vcd)
+    endif()
+
+    if(VERILATE_TRACE_VTR)
+        list(APPEND VERILATOR_ARGS --trace-vtr)
     endif()
 
     if(VERILATE_TRACE_STRUCTS)
@@ -466,6 +477,7 @@ function(verilate TARGET)
         json_get_bool(JOPTIONS_TRACE_FST "${MANIFEST}" options trace_fst)
         json_get_bool(JOPTIONS_TRACE_SAIF "${MANIFEST}" options trace_saif)
         json_get_bool(JOPTIONS_TRACE_VCD "${MANIFEST}" options trace_vcd)
+        json_get_bool(JOPTIONS_TRACE_VTR "${MANIFEST}" options trace_vtr)
 
         json_get_list(JSOURCES_GLOBAL "${MANIFEST}" sources global)
         json_get_list(JSOURCES_CLASSES_SLOW "${MANIFEST}" sources classes_slow)
@@ -507,7 +519,9 @@ function(verilate TARGET)
             "# SAIF Tracing output mode? 0/1 (from --trace-saif)\n"
             "set(${VERILATE_PREFIX}_TRACE_SAIF ${JOPTIONS_TRACE_SAIF})\n\n"
             "# VCD Tracing output mode?  0/1 (from --trace-vcd)\n"
-            "set(${VERILATE_PREFIX}_TRACE_VCD ${JOPTIONS_TRACE_VCD})\n"
+            "set(${VERILATE_PREFIX}_TRACE_VCD ${JOPTIONS_TRACE_VCD})\n\n"
+            "# VTR Tracing output mode?  0/1 (from --trace-vtr)\n"
+            "set(${VERILATE_PREFIX}_TRACE_VTR ${JOPTIONS_TRACE_VTR})\n"
             "### Sources...\n"
             "# Global classes, need linked once per executable\n"
             "set(${VERILATE_PREFIX}_GLOBAL ${JSOURCES_GLOBAL})\n"
@@ -659,6 +673,12 @@ function(verilate TARGET)
         set_property(TARGET ${TARGET} PROPERTY VERILATOR_TRACE_VCD ON)
     endif()
 
+    if(${VERILATE_PREFIX}_TRACE_VTR)
+        # If any verilate() call specifies TRACE_VTR, define VM_TRACE_VTR in the final build
+        set_property(TARGET ${TARGET} PROPERTY VERILATOR_TRACE ON)
+        set_property(TARGET ${TARGET} PROPERTY VERILATOR_TRACE_VTR ON)
+    endif()
+
     if(${VERILATE_PREFIX}_TRACE_STRUCTS)
         set_property(TARGET ${TARGET} PROPERTY VERILATOR_TRACE_STRUCTS ON)
     endif()
@@ -731,6 +751,7 @@ function(verilate TARGET)
             VM_SC=$<BOOL:$<TARGET_PROPERTY:VERILATOR_SYSTEMC>>
             VM_TRACE=$<BOOL:$<TARGET_PROPERTY:VERILATOR_TRACE>>
             VM_TRACE_VCD=$<BOOL:$<TARGET_PROPERTY:VERILATOR_TRACE_VCD>>
+            VM_TRACE_VTR=$<BOOL:$<TARGET_PROPERTY:VERILATOR_TRACE_VTR>>
             VM_TRACE_FST=$<BOOL:$<TARGET_PROPERTY:VERILATOR_TRACE_FST>>
             VM_TRACE_SAIF=$<BOOL:$<TARGET_PROPERTY:VERILATOR_TRACE_SAIF>>
     )

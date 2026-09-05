@@ -100,6 +100,7 @@ class V3EmitMkJsonEmitter final {
             .put("trace_fst", v3Global.opt.traceEnabledFst())
             .put("trace_saif", v3Global.opt.traceEnabledSaif())
             .put("trace_vcd", v3Global.opt.traceEnabledVcd())
+            .put("trace_vtr", v3Global.opt.traceEnabledVtr())
             .end()
             .begin("sources")
             .putList("global", global)

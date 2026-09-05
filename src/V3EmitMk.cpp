@@ -551,7 +551,7 @@ public:
         of.puts("VM_PARALLEL_BUILDS = ");
         of.puts(v3Global.useParallelBuild() ? "1" : "0");
         of.puts("\n");
-        of.puts("# Tracing output mode?  0/1 (from --trace-fst/--trace-saif/--trace-vcd)\n");
+        of.puts("# Tracing output mode?  0/1 (from --trace-fst/--trace-saif/--trace-vcd/--trace-vtr)\n");
         of.puts("VM_TRACE = ");
         of.puts(v3Global.opt.trace() ? "1" : "0");
         of.puts("\n");
@@ -566,6 +566,10 @@ public:
         of.puts("# Tracing output mode in VCD format?  0/1 (from --trace-vcd)\n");
         of.puts("VM_TRACE_VCD = ");
         of.puts(v3Global.opt.traceEnabledVcd() ? "1" : "0");
+        of.puts("\n");
+        of.puts("# Tracing output mode in VTR format?  0/1 (from --trace-vtr)\n");
+        of.puts("VM_TRACE_VTR = ");
+        of.puts(v3Global.opt.traceEnabledVtr() ? "1" : "0");
         of.puts("\n");
         of.puts("# VPI enabled?  0/1 (from --vpi)\n");
         of.puts("VM_VPI = ");

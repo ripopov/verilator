@@ -498,6 +498,7 @@ std::vector<std::string> V3Options::traceClassBases() const VL_MT_SAFE {
     if (traceEnabledFst()) result.emplace_back("VerilatedFst");
     if (traceEnabledSaif()) result.emplace_back("VerilatedSaif");
     if (traceEnabledVcd()) result.emplace_back("VerilatedVcd");
+    if (traceEnabledVtr()) result.emplace_back("VerilatedVtr");
     return result;
 }
 std::vector<std::string> V3Options::traceClassLangs() const VL_MT_SAFE {
@@ -511,6 +512,7 @@ std::vector<std::string> V3Options::traceSourceBases() const VL_MT_SAFE {
     if (traceEnabledFst()) result.emplace_back("verilated_fst");
     if (traceEnabledSaif()) result.emplace_back("verilated_saif");
     if (traceEnabledVcd()) result.emplace_back("verilated_vcd");
+    if (traceEnabledVtr()) result.emplace_back("verilated_vtr");
     return result;
 }
 std::vector<std::string> V3Options::traceSourceLangs() const VL_MT_SAFE {
@@ -993,13 +995,17 @@ void V3Options::notify() VL_MT_DISABLED {
         m_main = false;
     }
 
-    if (trace() && !traceEnabledFst() && !traceEnabledSaif() && !traceEnabledVcd()) {
+    if (trace() && !traceEnabledFst() && !traceEnabledSaif() && !traceEnabledVcd()
+        && !traceEnabledVtr()) {
         m_traceEnabledVcd = true;  // No format, with --trace means wanted --trace-vcd
     }
-    if (traceEnabledFst() || traceEnabledSaif() || traceEnabledVcd()) m_trace = true;
-    const int ntraces = traceEnabledFst() + traceEnabledSaif() + traceEnabledVcd();
+    if (traceEnabledFst() || traceEnabledSaif() || traceEnabledVcd() || traceEnabledVtr())
+        m_trace = true;
+    const int ntraces
+        = traceEnabledFst() + traceEnabledSaif() + traceEnabledVcd() + traceEnabledVtr();
     if (ntraces > 1)  // Issue #5813
-        cmdfl->v3error("Only one of --trace-fst, --trace-saif or --trace--vcd may be used");
+        cmdfl->v3error(
+            "Only one of --trace-fst, --trace-saif, --trace-vcd or --trace-vtr may be used");
 
     if (protectIds()) {
         if (allPublic()) {
@@ -1849,6 +1855,7 @@ void V3Options::parseOptsList(FileLine* fl, const string& optdir, int argc,
     DECL_OPTION("-no-trace-top", Set, &m_noTraceTop);
     DECL_OPTION("-trace-underscore", OnOff, &m_traceUnderscore);
     DECL_OPTION("-trace-vcd", CbCall, [this]() { m_traceEnabledVcd = true; });
+    DECL_OPTION("-trace-vtr", CbCall, [this]() { m_traceEnabledVtr = true; });
 
     DECL_OPTION("-U", CbPartialMatch, &V3PreShell::undef);
     DECL_OPTION("-underline-zero", OnOff, &m_underlineZero).undocumented();  // Deprecated

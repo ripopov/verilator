@@ -407,7 +407,7 @@ Verilate in CMake
 
    verilate(target SOURCES source ... [TOP_MODULE top] [PREFIX name]
             [COVERAGE] [SYSTEMC]
-            [TRACE_FST] [TRACE_SAIF] [TRACE_VCD] [TRACE_THREADS num]
+            [TRACE_FST] [TRACE_SAIF] [TRACE_VCD] [TRACE_VTR] [TRACE_THREADS num]
             [INCLUDE_DIRS dir ...] [OPT_SLOW ...] [OPT_FAST ...]
             [OPT_GLOBAL ..] [DIRECTORY dir] [THREADS num]
             [VERILATOR_ARGS ...])
@@ -513,6 +513,11 @@ include directories and link to the SystemC libraries.
 
    Optional. Enables VCD tracing if present, equivalent to "VERILATOR_ARGS
    --trace-vcd".
+
+.. describe:: TRACE_VTR
+
+   Optional. Enables VTR tracing if present, equivalent to "VERILATOR_ARGS
+   --trace-vtr".
 
 .. describe:: VERILATOR_ARGS
 

@@ -302,6 +302,7 @@ private:
     bool m_traceEnabledFst = false;  // main switch: --trace-fst
     bool m_traceEnabledSaif = false;  // main switch: --trace-saif
     bool m_traceEnabledVcd = false;  // main switch: --trace-vcd
+    bool m_traceEnabledVtr = false;  // main switch: --trace-vtr
     bool m_traceParams = true;      // main switch: --trace-params
     bool m_traceStructs = false;    // main switch: --trace-structs
     bool m_noTraceTop = false;      // main switch: --no-trace-top
@@ -578,6 +579,7 @@ public:
     bool traceEnabledFst() const { return m_traceEnabledFst; }
     bool traceEnabledSaif() const { return m_traceEnabledSaif; }
     bool traceEnabledVcd() const { return m_traceEnabledVcd; }
+    bool traceEnabledVtr() const { return m_traceEnabledVtr; }
     bool traceParams() const { return m_traceParams; }
     bool traceStructs() const { return m_traceStructs; }
     bool traceUnderscore() const { return m_traceUnderscore; }

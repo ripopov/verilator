@@ -95,6 +95,7 @@ VK_CPPFLAGS_ALWAYS += \
   -DVM_TRACE=$(VM_TRACE) \
   -DVM_TRACE_FST=$(VM_TRACE_FST) \
   -DVM_TRACE_VCD=$(VM_TRACE_VCD) \
+  -DVM_TRACE_VTR=$(VM_TRACE_VTR) \
   -DVM_TRACE_SAIF=$(VM_TRACE_SAIF) \
   -DVM_VPI=$(VM_VPI) \
   $(CFG_CXXFLAGS_NO_UNUSED) \
@@ -212,6 +213,16 @@ VK_USER_OBJS = $(addsuffix .o, $(VM_USER_CLASSES))
 ifneq ($(VM_TRACE_FST),0)
 ifneq ($(VM_TRACE_FST),)
     LDLIBS += -llz4 -lz
+endif
+endif
+
+# VTR tracing needs the VTR C library (libvtr) and its header (vtr.h).
+# Set VTR_INCLUDE and VTR_LIBDIR (environment or make command line) to where they are installed.
+ifneq ($(VM_TRACE_VTR),0)
+ifneq ($(VM_TRACE_VTR),)
+    CPPFLAGS += $(addprefix -I, $(VTR_INCLUDE))
+    LDFLAGS += $(addprefix -L, $(VTR_LIBDIR))
+    LDLIBS += -lvtr
 endif
 endif
 

@@ -1879,8 +1879,8 @@ Summary:
 
 .. option:: --trace
 
-   Deprecated; use :vlopt:`--trace-fst`, :vlopt:`--trace-saif` or
-   :vlopt:`--trace-vcd` instead.
+   Deprecated; use :vlopt:`--trace-fst`, :vlopt:`--trace-saif`,
+   :vlopt:`--trace-vcd` or :vlopt:`--trace-vtr` instead.
 
    Using :vlopt:`--trace` without :vlopt:`--trace-fst` nor
    :vlopt:`--trace-saif` requests VCD traces.
@@ -1975,6 +1975,13 @@ Summary:
    Enable tracing of signals or modules that start with an underscore.
    Otherwise, these signals are not output during tracing. See also
    :vlopt:`--coverage-underscore` option.
+
+.. option:: --trace-vtr
+
+   Enable VTR waveform tracing in the model. This overrides
+   :vlopt:`--trace`. VTR is a columnar, zstd-compressed trace format;
+   the model links against the VTR C library (see ``VTR_INCLUDE`` and
+   ``VTR_LIBDIR`` in ``verilated.mk``).
 
 .. option:: --trace-vcd
 
