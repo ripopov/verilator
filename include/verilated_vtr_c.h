@@ -49,6 +49,9 @@ private:
     // VTR-specific internals
 
     vtr_writer* m_vtr = nullptr;
+    const char* m_vdbDocumentp = nullptr;  // Static generated elaboration document
+    std::string m_vdbPrefix;  // Model instance wrapper in the recording
+    std::map<std::string, std::string> m_vdbMapping;  // Original path -> recorded path
     std::map<uint32_t, uint32_t> m_code2signal;  // Verilator trace code -> VTR signal id
     std::map<void*, std::map<int, uint32_t>> m_local2vtrEnum;  // dtypenum -> enum table node
     uint32_t* m_signalp = nullptr;  // same as m_code2signal, but as an array
@@ -60,6 +63,7 @@ private:
 
     // CONSTRUCTORS
     VL_UNCOPYABLE(VerilatedVtr);
+    void writeVdb(const char* filename);
     void declare(uint32_t code, const char* name, int dtypenum, VerilatedTraceSigDirection,
                  VerilatedTraceSigKind, VerilatedTraceSigType, bool array, int arraynum,
                  bool bussed, int msb, int lsb);
@@ -104,6 +108,8 @@ public:
     //=========================================================================
     // Internal interface to Verilator generated code
 
+    /// Register the elaborated companion and shared identity during trace initialization.
+    void declVdb(const char* identityp, const char* documentp, const char* prefixp);
     void pushPrefix(const char*, VerilatedTracePrefixType, int left = 0, int right = 0);
     void popPrefix();
 

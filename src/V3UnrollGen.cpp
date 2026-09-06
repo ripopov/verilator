@@ -223,6 +223,14 @@ class UnrollGenVisitor final : public VNVisitor {
                     const string index = AstNode::encodeNumber(varValuep->toSInt());
                     const string nname = m_beginName + "__BRA__" + index + "__KET__";
                     oneloopp = new AstGenBlock{oneloopp->fileline(), nname, oneloopp, false};
+                    if (v3Global.opt.traceEnabledVtr()) {
+                        // IEEE 1800-2023 27.4: each generated scope has an implicit
+                        // localparam for its genvar. Retain it for source browsing.
+                        AstVar* const paramp = new AstVar{m_forVarp->fileline(), VVarType::LPARAM,
+                                                          m_forVarp->name(), m_forVarp->dtypep()};
+                        paramp->valuep(varValuep->cloneTree(false));
+                        VN_AS(oneloopp, GenBlock)->addItemsp(paramp);
+                    }
                     VL_DO_DANGLING(pushDeletep(varValuep), varValuep);
                     if (newbodysp) {
                         newbodysp->addNext(oneloopp);

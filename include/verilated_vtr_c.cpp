@@ -30,6 +30,7 @@
 #include "vtr.h"
 
 #include <cmath>
+#include <fstream>
 #include <sstream>
 #include <string>
 
@@ -73,7 +74,11 @@ void VerilatedVtr::open(const char* filename) VL_MT_SAFE_EXCLUDES(m_mutex) {
     constDump(true);  // First dump must contain the const signals
     fullDump(true);  // First dump must be full for VTR
 
+    m_vdbDocumentp = nullptr;
+    m_vdbMapping.clear();
     Super::traceInit();
+    if (m_vdbDocumentp) writeVdb(filename);
+    m_vdbMapping.clear();
 
     // convert m_code2signal into an array for fast lookup
     if (!m_signalp) {
@@ -81,6 +86,58 @@ void VerilatedVtr::open(const char* filename) VL_MT_SAFE_EXCLUDES(m_mutex) {
         for (const auto& i : m_code2signal) m_signalp[i.first] = i.second;
     }
     m_code2signal.clear();
+}
+
+namespace {
+std::string vdbQuote(const std::string& text) {
+    std::string out = "\"";
+    for (const unsigned char c : text) {
+        if (c == '"' || c == '\\') out += '\\';
+        if (c < 32) {
+            static constexpr char HEX[] = "0123456789abcdef";
+            out += "\\u00";
+            out += HEX[c >> 4];
+            out += HEX[c & 15];
+        } else {
+            out += static_cast<char>(c);
+        }
+    }
+    return out + '"';
+}
+}  // namespace
+
+void VerilatedVtr::declVdb(const char* identityp, const char* documentp, const char* prefixp) {
+    if (m_vdbDocumentp) {
+        VL_FATAL_MT(__FILE__, __LINE__, "", "A VTR/VDB recording requires one elaborated model");
+    }
+    m_vdbDocumentp = documentp;
+    m_vdbPrefix = prefixp;
+    vtr_value identity{};
+    identity.tag = VTR_VAL_STR;
+    identity.str_id = vtr_writer_intern(m_vtr, identityp);
+    if (vtr_writer_set_file_attr(m_vtr, "design.vdb_id", &identity) != VTR_OK) {
+        VL_FATAL_MT(__FILE__, __LINE__, "", "Cannot attach VDB identity to VTR");
+    }
+}
+
+void VerilatedVtr::writeVdb(const char* filename) {
+    std::string path{filename};
+    if (path.size() >= 4 && path.substr(path.size() - 4) == ".vtr") path.resize(path.size() - 4);
+    path += ".vdb.json";
+    std::ofstream out{path, std::ios::binary};
+    // The generated document is a complete JSON object. Append the explicit
+    // attachment produced by trace declarations, without parsing source metadata.
+    out.write(m_vdbDocumentp, std::strlen(m_vdbDocumentp) - 1);
+    out << ",\"trace_binding\":{\"prefix\":" << vdbQuote(m_vdbPrefix) << ",\"signals\":{";
+    bool first = true;
+    for (const auto& binding : m_vdbMapping) {
+        if (!first) out << ',';
+        first = false;
+        out << vdbQuote(binding.first) << ':' << vdbQuote(binding.second);
+    }
+    out << "}}}\n";
+    out.close();
+    if (!out) VL_FATAL_MT(__FILE__, __LINE__, path.c_str(), "Cannot write VDB companion");
 }
 
 void VerilatedVtr::close() VL_MT_SAFE_EXCLUDES(m_mutex) {
@@ -211,6 +268,16 @@ void VerilatedVtr::declare(uint32_t code, const char* name, int dtypenum,
 
     const bool enabled = Super::declCode(code, hierarchicalName, bits);
     if (!enabled) return;
+
+    if (m_vdbDocumentp) {
+        std::string recorded = hierarchicalName;
+        for (char& c : recorded)
+            if (c == ' ') c = '.';
+        if (array) recorded += "[" + std::to_string(arraynum) + "]";
+        const std::string wrapper = m_vdbPrefix.empty() ? "" : m_vdbPrefix + '.';
+        const std::string original = recorded.substr(wrapper.size());
+        m_vdbMapping.emplace(original, recorded);
+    }
 
     // Same naming as the FST backend: "name[index]" for array members and a
     // trailing " [msb:lsb]" for buses, so files of both formats read alike.

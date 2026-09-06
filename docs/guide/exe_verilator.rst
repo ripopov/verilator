@@ -1983,6 +1983,21 @@ Summary:
    the model links against the VTR C library (see ``VTR_INCLUDE`` and
    ``VTR_LIBDIR`` in ``verilated.mk``).
 
+   Also exports an experimental RTL VDB companion containing elaborated module
+   hierarchy, specialized types, source locations, connections and processes.
+   Verilation writes ``<Mdir>/<prefix>.vdb.json``. The generated model embeds
+   this document; opening ``simulation.vtr`` also writes
+   ``simulation.vdb.json`` with an explicit signal mapping and shared design
+   identity. No additional elaborator is required. The VDB can be used with
+   the VTR project's ``vtr-vdb`` tool for source navigation, module netlist
+   SVGs and temporal driver tracing.
+
+   Source semantics are preserved before optimization. Unsupported evaluation
+   constructs retain connectivity and diagnostics. Trace depth and filtering
+   can leave signals unavailable in the recording. Each VTR/VDB recording
+   currently accepts one elaborated model. The companion includes original
+   design information and is not protected by :vlopt:`--protect-ids`.
+
 .. option:: --trace-vcd
 
    Adds waveform tracing code to the model using VCD format.

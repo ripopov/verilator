@@ -52,6 +52,7 @@
 #include "V3EmitMk.h"
 #include "V3EmitMkJson.h"
 #include "V3EmitV.h"
+#include "V3EmitVdb.h"
 #include "V3ExecGraph.h"
 #include "V3Expand.h"
 #include "V3File.h"
@@ -218,6 +219,9 @@ static void process() {
         V3Width::width(v3Global.rootp());
 
         V3Error::abortIfErrors();
+
+        // Preserve source event controls before width commitment lowers them.
+        if (v3Global.opt.traceEnabledVtr()) V3EmitVdb::emit();
 
         // Commit to the widths we've chosen; Make widthMin==width
         V3WidthCommit::widthCommit(v3Global.rootp());

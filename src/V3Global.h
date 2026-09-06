@@ -114,6 +114,8 @@ class V3Global final {
     bool m_assertScoped = false;  // Tree is scoped
     bool m_assignsEvents = false;  // Design uses assignments on SystemVerilog Events
     bool m_constRemoveXs = false;  // Const needs to strip any Xs
+    string m_vdbDocument;  // Elaborated RTL companion document
+    string m_vdbId;  // Identity shared with generated VTR models
     // Experimenting with always requiring heavy, see issue #2701
     bool m_needTraceDumper = false;  // Need __Vm_dumperp in symbols
     bool m_dpi = false;  // Need __Dpi include files
@@ -183,6 +185,10 @@ public:
     void constRemoveXs(bool flag) { m_constRemoveXs = flag; }
     string debugFilename(const string& nameComment, int newNumber = 0);
     static string digitsFilename(int number);
+    const string& vdbDocument() const { return m_vdbDocument; }
+    void vdbDocument(const string& value) { m_vdbDocument = value; }
+    const string& vdbId() const { return m_vdbId; }
+    void vdbId(const string& value) { m_vdbId = value; }
     bool needTraceDumper() const { return m_needTraceDumper; }
     void needTraceDumper(bool flag) { m_needTraceDumper = flag; }
     bool dpi() const VL_MT_SAFE { return m_dpi; }

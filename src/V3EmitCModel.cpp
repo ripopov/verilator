@@ -557,6 +557,15 @@ class EmitCModel final : public EmitCFunc {
         puts("\"Turning on wave traces requires Verilated::traceEverOn(true) call before time "
              "0.\");\n");
         puts("}\n");
+        if (v3Global.opt.traceEnabledVtr()) {
+            puts("static const char vdb[] =\n");
+            const string& doc = v3Global.vdbDocument();
+            static constexpr size_t VDB_LITERAL_CHUNK = 4096;
+            for (size_t offset = 0; offset < doc.size(); offset += VDB_LITERAL_CHUNK) {
+                puts("\"" + V3OutFormatter::quoteNameControls(doc.substr(offset, VDB_LITERAL_CHUNK)) + "\"\n");
+            }
+            puts(";\ntracep->declVdb(\"" + v3Global.vdbId() + "\", vdb, vlSymsp->name());\n");
+        }
         puts("vlSymsp->__Vm_baseCode = code;\n");
         if (v3Global.opt.libCreate().empty()) {
             puts("tracep->pushPrefix(vlSymsp->name(), VerilatedTracePrefixType::SCOPE_MODULE);\n");

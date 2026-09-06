@@ -122,6 +122,7 @@ class FileLineSingleton final {
     FileLineSingleton() = default;
     ~FileLineSingleton() = default;
 
+    const std::deque<string>& filenames() const { return m_names; }
     fileNameIdx_t nameToNumber(const string& filename);
     const std::string& numberToName(fileNameIdx_t filenameno) const VL_MT_SAFE {
         return m_names[filenameno];
@@ -401,6 +402,7 @@ public:
     // METHODS - Global
     // <command-line> and <built-in> match what GCC outputs
     static string commandLineFilename() VL_MT_SAFE { return "<command-line>"; }
+    static const std::deque<string>& filenames() { return singleton().filenames(); }
     static string builtInFilename() VL_MT_SAFE { return "<built-in>"; }
     static void globalWarnOff(V3ErrorCode code, bool turnOff) {
         defaultFileLine().warnOff(code, turnOff);
