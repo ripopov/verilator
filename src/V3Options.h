@@ -721,6 +721,10 @@ public:
     const VFileLibList& vFiles() const { return m_vFiles; }
     const VFileLibSet& vltFiles() const { return m_vltFiles; }
     const VStringList& forceIncs() const { return m_forceIncs; }
+    std::vector<string> incDirUsers() const;  // +incdir+/-I/-y directories in user order
+    std::vector<string> libExtVs() const;  // +libext+ extensions in user order
+    const std::vector<std::pair<string, string>>& cmdDefines() const;  // +define+/-D in order
+    V3LangCode defaultLanguage() const { return m_defaultLanguage; }
 
     bool hasParameter(const string& name);
     string parameter(const string& name);

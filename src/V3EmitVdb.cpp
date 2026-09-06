@@ -14,6 +14,7 @@
 
 #include "V3File.h"
 #include "V3Global.h"
+#include "V3Os.h"
 #include "V3Stats.h"
 #include "V3String.h"
 
@@ -417,6 +418,8 @@ class VdbEmitter final {
         m_path = path;
         Items ports;
         for (const AstVar* const vp : m_indexp->vars) {
+            // Interface references name an instance, not a value.
+            if (vp->isIfaceRef()) continue;
             const string name = path + '.' + m_indexp->names.at(vp);
             Fields fields{{"path", quote(name)},
                           {"owner", quote(path)},
@@ -459,6 +462,9 @@ class VdbEmitter final {
             for (const AstPin* pinp = cp->pinsp(); pinp; pinp = VN_CAST(pinp->nextp(), Pin)) {
                 if (!pinp->modVarp() || !pinp->exprp()) continue;
                 const AstVar* const vp = pinp->modVarp();
+                // Interface references are not data ports; the connected interface
+                // instance is exported as a scope instead.
+                if (!vp->isIO()) continue;
                 const string port = childPath + '.' + childIndex.names.at(vp);
                 const AstNodeExpr* const ep = VN_CAST(pinp->exprp(), NodeExpr);
                 if (!ep) continue;
@@ -533,11 +539,38 @@ public:
             sources.push_back(object(
                 {{"path", quote(file)}, {"sha256", quote(VHashSha256{bytes}.digestHex())}}));
         }
+        // Structured elaboration inputs so design browsers can re-elaborate the same
+        // source set with another frontend. Paths are as given on the command line and
+        // resolve relative to work_dir.
+        Items files;
+        for (const VFileLibName& file : v3Global.opt.vFiles()) files.push_back(quote(file.filename()));
+        Items libraryFiles;
+        for (const VFileLibName& file : v3Global.opt.libraryFiles()) {
+            libraryFiles.push_back(quote(file.filename()));
+        }
+        Items includeDirs;
+        for (const string& dir : v3Global.opt.incDirUsers()) includeDirs.push_back(quote(dir));
+        Items libraryExts;
+        for (const string& ext : v3Global.opt.libExtVs()) libraryExts.push_back(quote(ext));
+        Items defines;
+        for (const auto& define : v3Global.opt.cmdDefines()) {
+            defines.push_back(
+                object({{"name", quote(define.first)}, {"value", quote(define.second)}}));
+        }
+        const string elaboration
+            = object({{"work_dir", quote(V3Os::filenameRealPath("."))},
+                      {"language", quote(v3Global.opt.defaultLanguage().ascii())},
+                      {"files", array(files)},
+                      {"library_files", array(libraryFiles)},
+                      {"include_dirs", array(includeDirs)},
+                      {"library_exts", array(libraryExts)},
+                      {"defines", array(defines)}});
         Fields fields{{"format", quote("vtr-rtl-vdb")},
                       {"version", "2"},
                       {"producer", quote(V3Options::version())},
                       {"top", quote(topp->origName())},
                       {"options", array({quote(v3Global.opt.allArgsString())})},
+                      {"elaboration", elaboration},
                       {"sources", array(sources)},
                       {"instances", array(m_instances)},
                       {"symbols", object(m_symbols)},

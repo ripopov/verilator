@@ -76,6 +76,7 @@ public:
     std::set<string> m_incDirFallbackSet;  // Include directories (for removing duplicates)
     std::map<const string, V3LangCode> m_langExts;  // Language extension map
     VInsertionSet<std::string> m_libExtVs;  // Library extensions (ordered)
+    std::vector<std::pair<string, string>> m_cmdDefines;  // Command line defines (ordered)
     DirMap m_dirMap;  // Directory listing
 
     // ACCESSOR METHODS
@@ -309,8 +310,18 @@ void V3Options::addDefine(const string& defline, bool allowPlus) VL_MT_DISABLED 
             value = def.substr(pos + 1);
             def.erase(pos);
         }
+        m_impp->m_cmdDefines.emplace_back(def, value);
         V3PreShell::defineCmdLine(def, value);
     }
+}
+std::vector<string> V3Options::incDirUsers() const {
+    return std::vector<string>{m_impp->m_incDirUsers.begin(), m_impp->m_incDirUsers.end()};
+}
+std::vector<string> V3Options::libExtVs() const {
+    return std::vector<string>{m_impp->m_libExtVs.begin(), m_impp->m_libExtVs.end()};
+}
+const std::vector<std::pair<string, string>>& V3Options::cmdDefines() const {
+    return m_impp->m_cmdDefines;
 }
 void V3Options::addParameter(const string& paramline, bool allowPlus) {
     // Split +define+foo=value into the appropriate parts and parse
