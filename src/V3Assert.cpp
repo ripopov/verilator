@@ -967,10 +967,13 @@ class AssertVisitor final : public VNVisitor {
         if (nodep->displayType() == VDisplayType::DT_INFO) {
             replaceDisplay(nodep, "-Info");
         } else if (nodep->displayType() == VDisplayType::DT_WARNING) {
+            if (v3Global.opt.traceEnabledVtr()) nodep->logSeverity(3);
             replaceDisplay(nodep, "%%Warning");
         } else if (nodep->displayType() == VDisplayType::DT_ERROR) {
+            if (v3Global.opt.traceEnabledVtr()) nodep->logSeverity(4);
             replaceDisplay(nodep, "%%Error");
         } else if (nodep->displayType() == VDisplayType::DT_FATAL) {
+            if (v3Global.opt.traceEnabledVtr()) nodep->logSeverity(5);
             replaceDisplay(nodep, "%%Fatal");
         } else if (nodep->displayType() == VDisplayType::DT_MONITOR) {
             nodep->displayType(VDisplayType::DT_DISPLAY);

@@ -2285,8 +2285,12 @@ void AstConfigUse::dumpJson(std::ostream& str) const {
 void AstDisplay::dump(std::ostream& str) const {
     this->AstNodeStmt::dump(str);
     str << " [" << displayType().ascii() << "]";
+    if (logSeverity() != 2) str << " severity=" << logSeverity();
 }
-void AstDisplay::dumpJson(std::ostream& str) const { dumpJsonGen(str); }
+void AstDisplay::dumpJson(std::ostream& str) const {
+    if (logSeverity() != 2) dumpJsonStr(str, "logSeverity", cvtToStr(logSeverity()));
+    dumpJsonGen(str);
+}
 void AstEnumDType::dump(std::ostream& str) const {
     this->AstNodeDType::dump(str);
     str << " enum";

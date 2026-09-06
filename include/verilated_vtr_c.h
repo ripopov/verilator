@@ -49,6 +49,10 @@ private:
     // VTR-specific internals
 
     vtr_writer* m_vtr = nullptr;
+    VerilatedContext* m_logContextp = nullptr;  // Owns the registered sink until close
+    uint32_t m_logSites[6]{};  // One generator per severity in the simulation log stream
+    static void logCallback(void* data, uint8_t severity, uint64_t time, const std::string& text);
+
     const char* m_vdbDocumentp = nullptr;  // Static generated elaboration document
     std::string m_vdbPrefix;  // Model instance wrapper in the recording
     std::map<std::string, std::string> m_vdbMapping;  // Original path -> recorded path

@@ -3898,6 +3898,8 @@ class ConstVisitor final : public VNVisitor {
         if (stmtDisplayDisplay(nodep)) return;
     }
     bool stmtDisplayDisplay(AstDisplay* nodep) {
+        // Each reporting task is an independently timestamped VTR log record.
+        if (v3Global.opt.traceEnabledVtr()) return false;
         // DISPLAY(SFORMAT(text1)),DISPLAY(SFORMAT(text2)) -> DISPLAY(SFORMAT(text1+text2))
         if (!m_modp) return false;  // Don't optimize under single statement
         AstDisplay* const prevp = VN_CAST(nodep->backp(), Display);

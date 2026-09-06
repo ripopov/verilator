@@ -357,6 +357,8 @@ class VerilatedContext VL_NOT_FINAL {
     friend class VerilatedContextImp;
 
 private:
+    using LogCallback = void (*)(void*, uint8_t, uint64_t, const std::string&);
+    std::vector<std::pair<LogCallback, void*>> m_logCallbacks;  // Main evaluation thread only
     // MEMBERS
     // Numer of assertion directive type members. Then each of them will represented as 1-bit in a
     // mask.
@@ -496,6 +498,14 @@ public:
     ~VerilatedContext();
 
     // METHODS - User called
+
+    /// Add a runtime log sink. Register/remove only between model evaluations.
+    /// Severity: trace=0, debug=1, info=2, warning=3, error=4, fatal=5.
+    void addLogCb(LogCallback cb, void* data) VL_MT_UNSAFE;
+    /// Remove a sink before its data is destroyed, after evaluation queues drain.
+    void removeLogCb(LogCallback cb, void* data) VL_MT_UNSAFE;
+    /// Deliver a timestamped message on the main evaluation thread.
+    void logMessage(uint8_t severity, uint64_t time, const std::string& text) VL_MT_UNSAFE;
 
     /// Return if assertions enabled
     bool assertOn() const VL_MT_SAFE;

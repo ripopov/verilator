@@ -213,11 +213,13 @@ bool EmitCFunc::displayEmitHeader(AstNode* nodep) {
     } else if (const AstDisplay* const dispp = VN_CAST(nodep, Display)) {
         isStmt = true;
         if (dispp->filep()) {
-            putns(nodep, "VL_FWRITEF_NX(");
+            putns(nodep, v3Global.opt.traceEnabledVtr() ? "VL_FLOG_WRITEF_NX(" : "VL_FWRITEF_NX(");
+            if (v3Global.opt.traceEnabledVtr()) puts(cvtToStr(dispp->logSeverity()) + ",");
             iterateConst(dispp->filep());
             puts(",");
         } else {
-            putns(nodep, "VL_WRITEF_NX(");
+            putns(nodep, v3Global.opt.traceEnabledVtr() ? "VL_LOG_WRITEF_NX(" : "VL_WRITEF_NX(");
+            if (v3Global.opt.traceEnabledVtr()) puts(cvtToStr(dispp->logSeverity()) + ",");
         }
     } else if (const AstSFormat* const dispp = VN_CAST(nodep, SFormat)) {
         isStmt = true;

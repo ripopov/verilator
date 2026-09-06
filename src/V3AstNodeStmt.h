@@ -604,6 +604,7 @@ class AstDisplay final : public AstNodeStmt {
     // @astgen op1 := fmtp : AstSFormatF
     // @astgen op2 := filep : Optional[AstNodeExpr] // file (must resolve to a VarRef)
     VDisplayType m_displayType;
+    int m_logSeverity = 2;  // Runtime log severity, retained when diagnostics become writes
 
 public:
     AstDisplay(FileLine* fl, VDisplayType dispType, const string& text, AstNodeExpr* filep,
@@ -640,11 +641,14 @@ public:
     bool isOutputter() override { return true; }  // SPECIAL: $display makes output
     bool isUnlikely() const override { return true; }
     bool sameNode(const AstNode* samep) const override {
-        return displayType() == VN_DBG_AS(samep, Display)->displayType();
+        return displayType() == VN_DBG_AS(samep, Display)->displayType()
+               && logSeverity() == VN_DBG_AS(samep, Display)->logSeverity();
     }
     int instrCount() const override { return INSTR_COUNT_PLI; }
     VDisplayType displayType() const { return m_displayType; }
     void displayType(VDisplayType type) { m_displayType = type; }
+    int logSeverity() const { return m_logSeverity; }
+    void logSeverity(int value) { m_logSeverity = value; }
     // * = Add a newline for $display
     bool addNewline() const { return displayType().addNewline(); }
 };

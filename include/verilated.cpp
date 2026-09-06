@@ -130,10 +130,17 @@ thread_local Verilated::ThreadLocal Verilated::t_s;
 //===========================================================================
 // Warning print helper
 
-void vl_print_warn_error(const char* prefix, const char* filename, int linenum,
-                         const char* msg) VL_MT_UNSAFE {
+void vl_print_warn_error(const char* prefix, const char* filename, int linenum, const char* msg,
+                         uint8_t severity = 4) VL_MT_UNSAFE {
     // A msg of "ERRORCODE: ..." is a code that changes to a prefix, e.g. "%Error-ERRORCODE: ..."
     // This avoids changing public API of the vl_stop and related functions.
+    const std::string text = std::string{prefix} + ": "
+                             + ((filename && filename[0])
+                                    ? std::string{filename} + ":" + std::to_string(linenum) + ": "
+                                    : std::string{})
+                             + msg + "\n";
+    VerilatedContext* const contextp = Verilated::threadContextp();
+    contextp->logMessage(severity, contextp->time(), text);
     const char* msgNoCp = msg;
     for (; isupper(*msgNoCp); ++msgNoCp);
     if (msgNoCp[0] == ':' && msgNoCp[1] == ' ') {
@@ -165,6 +172,10 @@ void vl_print_warn_error(const char* prefix, const char* filename, int linenum,
 #ifndef VL_USER_FINISH  ///< Define this to override the vl_finish function
 void vl_finish(const char* filename, int linenum, const char* hier) VL_MT_UNSAFE {
     (void)hier;  // hier is unused in the default implementation.
+    VerilatedContext* const contextp = Verilated::threadContextp();
+    contextp->logMessage(2, contextp->time(),
+                         std::string{"- "} + filename + ":" + std::to_string(linenum)
+                             + ": Verilog $finish\n");
     VL_PRINTF(  // Not VL_PRINTF_MT, already on main thread
         "- %s:%d: Verilog $finish\n", filename, linenum);
     Verilated::threadContextp()->gotFinish(true);
@@ -195,9 +206,11 @@ void vl_fatal(const char* filename, int linenum, const char* hier, const char* m
     (void)hier;  // hier is unused in the default implementation.
     Verilated::threadContextp()->gotError(true);
     Verilated::threadContextp()->gotFinish(true);
-    vl_print_warn_error("%Error", filename, linenum, msg);
+    vl_print_warn_error("%Error", filename, linenum, msg, 5);
     Verilated::runFlushCallbacks();
 
+    Verilated::threadContextp()->logMessage(5, Verilated::threadContextp()->time(),
+                                            "Aborting...\n");
     VL_PRINTF("Aborting...\n");  // Not VL_PRINTF_MT, already on main thread
 
     // Second flush in case VL_PRINTF does something needing a flush
@@ -223,7 +236,7 @@ void vl_stop_maybe(const char* filename, int linenum, const char* hier, bool may
         // Do just once when cross error limit
         if (Verilated::threadContextp()->errorCount() == 1) {
             vl_print_warn_error("-Info", filename, linenum,
-                                "Verilog $stop, ignored due to +verilator+error+limit");
+                                "Verilog $stop, ignored due to +verilator+error+limit", 2);
         }
     } else {
         vl_stop(filename, linenum, hier);
@@ -234,7 +247,7 @@ void vl_stop_maybe(const char* filename, int linenum, const char* hier, bool may
 #ifndef VL_USER_WARN  ///< Define this to override the vl_warn function
 void vl_warn(const char* filename, int linenum, const char* hier, const char* msg) VL_MT_UNSAFE {
     (void)hier;  // hier is unused in the default implementation.
-    vl_print_warn_error("%Warning", filename, linenum, msg);
+    vl_print_warn_error("%Warning", filename, linenum, msg, 3);
     Verilated::runFlushCallbacks();
 }
 #endif
@@ -366,14 +379,29 @@ void VL_DBG_MSGF(const char* formatp, ...) VL_MT_SAFE {
     VL_PRINTF("-V{t%u,%" PRIu64 "}%s", VL_THREAD_ID(), _vl_dbg_sequence_number(), result.c_str());
 }
 
+static void vl_print_message_mt(uint8_t severity, const std::string& text) VL_MT_SAFE {
+    VerilatedContext* const contextp = Verilated::threadContextp();
+    const uint64_t timestamp = contextp->time();
+    VerilatedThreadMsgQueue::post(VerilatedMsg{[=]() {
+        contextp->logMessage(severity, timestamp, text);
+        VL_PRINTF("%s", text.c_str());
+    }});
+}
+
 void VL_PRINTF_MT(const char* formatp, ...) VL_MT_SAFE {
     va_list ap;
     va_start(ap, formatp);
     const std::string result = _vl_string_vprintf(formatp, ap);
     va_end(ap);
-    VerilatedThreadMsgQueue::post(VerilatedMsg{[=]() {  //
-        VL_PRINTF("%s", result.c_str());
-    }});
+    vl_print_message_mt(2, result);
+}
+
+void VL_PRINTF_MT(uint8_t severity, const char* formatp, ...) VL_MT_SAFE {
+    va_list ap;
+    va_start(ap, formatp);
+    const std::string result = _vl_string_vprintf(formatp, ap);
+    va_end(ap);
+    vl_print_message_mt(severity, result);
 }
 
 void VL_FFLUSH_MT() VL_MT_SAFE {
@@ -499,7 +527,8 @@ std::string VlRNG::get_randstate() const VL_MT_UNSAFE {
 }
 void VlRNG::set_randstate(const std::string& state) VL_MT_UNSAFE {
     if (VL_UNLIKELY((state.length() != 1 + 2 * sizeof(m_state)) || (state[0] != 'R'))) {
-        VL_PRINTF_MT("%%Warning: set_randstate ignored as state string not from get_randstate\n");
+        VL_PRINTF_MT(3,
+                     "%%Warning: set_randstate ignored as state string not from get_randstate\n");
         return;
     }
     char* const stateCharsp = reinterpret_cast<char*>(&m_state);
@@ -1998,6 +2027,29 @@ std::string VL_SFORMATF_N_NX(const std::string& format, int argc, ...) VL_MT_SAF
     return output;
 }
 
+void VerilatedContext::addLogCb(LogCallback cb, void* data) VL_MT_UNSAFE {
+    m_logCallbacks.emplace_back(cb, data);
+}
+
+void VerilatedContext::removeLogCb(LogCallback cb, void* data) VL_MT_UNSAFE {
+    const auto entry = std::make_pair(cb, data);
+    m_logCallbacks.erase(std::remove(m_logCallbacks.begin(), m_logCallbacks.end(), entry),
+                         m_logCallbacks.end());
+}
+
+void VerilatedContext::logMessage(uint8_t severity, uint64_t timestamp,
+                                  const std::string& text) VL_MT_UNSAFE {
+    for (const auto& sink : m_logCallbacks) sink.first(sink.second, severity, timestamp, text);
+}
+
+// Capture time before queueing: worker messages belong to the evaluation that produced them.
+static void vl_log_message(int severity, const std::string& text) VL_MT_SAFE {
+    VerilatedContext* const contextp = Verilated::threadContextp();
+    const uint64_t timestamp = contextp->time();
+    VerilatedThreadMsgQueue::post(VerilatedMsg{
+        [=]() { contextp->logMessage(static_cast<uint8_t>(severity), timestamp, text); }});
+}
+
 void VL_WRITEF_NX(const std::string& format, int argc, ...) VL_MT_SAFE {
     static thread_local std::string t_output;  // static only for speed
     va_list ap;
@@ -2109,6 +2161,45 @@ void VL_FWRITEF_NX(IData fpi, const char* formatp, int argc, ...) VL_MT_SAFE {
     _vl_vsformat(t_output, formatp, argc, ap);
     va_end(ap);
 
+    Verilated::threadContextp()->impp()->fdWrite(fpi, t_output);
+}
+
+void VL_LOG_WRITEF_NX(int severity, const char* formatp, int argc, ...) VL_MT_SAFE {
+    static thread_local std::string t_output;
+    va_list ap;
+    va_start(ap, argc);
+    _vl_vsformat(t_output, formatp, argc, ap);
+    va_end(ap);
+    vl_print_message_mt(static_cast<uint8_t>(severity), t_output);
+}
+
+void VL_LOG_WRITEF_NX(int severity, const std::string& format, int argc, ...) VL_MT_SAFE {
+    static thread_local std::string t_output;
+    va_list ap;
+    va_start(ap, argc);
+    _vl_vsformat(t_output, format.c_str(), argc, ap);
+    va_end(ap);
+    vl_print_message_mt(static_cast<uint8_t>(severity), t_output);
+}
+
+void VL_FLOG_WRITEF_NX(int severity, IData fpi, const char* formatp, int argc, ...) VL_MT_SAFE {
+    static thread_local std::string t_output;
+    va_list ap;
+    va_start(ap, argc);
+    _vl_vsformat(t_output, formatp, argc, ap);
+    va_end(ap);
+    vl_log_message(severity, t_output);
+    Verilated::threadContextp()->impp()->fdWrite(fpi, t_output);
+}
+
+void VL_FLOG_WRITEF_NX(int severity, IData fpi, const std::string& format, int argc,
+                       ...) VL_MT_SAFE {
+    static thread_local std::string t_output;
+    va_list ap;
+    va_start(ap, argc);
+    _vl_vsformat(t_output, format.c_str(), argc, ap);
+    va_end(ap);
+    vl_log_message(severity, t_output);
     Verilated::threadContextp()->impp()->fdWrite(fpi, t_output);
 }
 
@@ -3253,7 +3344,7 @@ std::string VerilatedContext::dumpfile() const VL_MT_SAFE_EXCLUDES(m_timeDumpMut
 std::string VerilatedContext::dumpfileCheck() const VL_MT_SAFE_EXCLUDES(m_timeDumpMutex) {
     std::string out = dumpfile();
     if (VL_UNLIKELY(out.empty())) {
-        VL_PRINTF_MT("%%Warning: $dumpvar ignored as not preceded by $dumpfile\n");
+        VL_PRINTF_MT(3, "%%Warning: $dumpvar ignored as not preceded by $dumpfile\n");
         return "";
     }
     return out;
@@ -3372,7 +3463,8 @@ void VerilatedContext::threads(unsigned n) {
     m_threads = n;
     const unsigned threadsAvailableToProcess = VlOs::getProcessDefaultParallelism();
     if (m_threads > threadsAvailableToProcess) {
-        VL_PRINTF_MT("%%Warning: Process has %u hardware threads available, but simulation thread "
+        VL_PRINTF_MT(3,
+                     "%%Warning: Process has %u hardware threads available, but simulation thread "
                      "count set to %u. This will likely cause significant slowdown.\n",
                      threadsAvailableToProcess, m_threads);
     }
@@ -3963,7 +4055,8 @@ void Verilated::stackCheck(QData needSize) VL_MT_UNSAFE {
             true ||
 #endif
             setrlimit(RLIMIT_STACK, &rlim)) {
-            VL_PRINTF_MT("%%Warning: System has stack size %" PRIu64 " kb"
+            VL_PRINTF_MT(3,
+                         "%%Warning: System has stack size %" PRIu64 " kb"
                          " which may be too small; failed to request more"
                          " using 'ulimit -s %" PRIu64 "'\n",
                          haveSize / 1024, requestSize);

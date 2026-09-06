@@ -1983,6 +1983,22 @@ Summary:
    the model links against the VTR C library (see ``VTR_INCLUDE`` and
    ``VTR_LIBDIR`` in ``verilated.mk``).
 
+   Records runtime SystemVerilog reporting tasks in one ``simulation_log``
+   transaction stream, with one generator for each severity. Display, write,
+   monitor, strobe and file-output tasks use info; ``$warning``, ``$error`` and
+   ``$fatal`` retain their severity. Each executed task produces a separate
+   record, including partial writes. Existing console and file output continues.
+   ``$finish``, ``$printtimescale`` and runtime printing-helper diagnostics
+   are recorded as well.
+
+   Open the VTR trace before evaluating the model, and set the simulation
+   context's time before each evaluation. Messages use that current time,
+   including messages issued by worker threads. The timestamp passed to a later
+   waveform dump does not retroactively timestamp messages. Capture ends when
+   the trace closes; fatal shutdown finalizes the trace through the normal exit
+   callbacks. Non-UTF-8 output is recorded as ``[non-UTF-8 bytes]`` followed
+   by hexadecimal bytes, preserving the original data. Compile-time diagnostics and arbitrary C++ stdout are not captured.
+
    Also exports an experimental RTL VDB companion containing elaborated module
    hierarchy, specialized types, source locations, connections and processes.
    Verilation writes ``<Mdir>/<prefix>.vdb.json``. The generated model embeds

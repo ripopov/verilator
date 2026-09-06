@@ -322,11 +322,15 @@ void VerilatedTrace<VL_SUB_T, VL_BUF_T>::dump(uint64_t timeui) VL_MT_SAFE_EXCLUD
     // Not really VL_MT_SAFE but more VL_MT_UNSAFE_ONE.
     // This does get the mutex, but if multiple threads are trying to dump
     // chances are the data being dumped will have other problems
-    const VerilatedLockGuard lock{m_mutex};
+    std::unique_lock<VerilatedMutex> lock{m_mutex};
     if (VL_UNCOVERABLE(m_didSomeDump && timeui <= m_timeLastDump)) {  // LCOV_EXCL_START
-        VL_PRINTF_MT("%%Warning: previous dump at t=%" PRIu64 ", requesting t=%" PRIu64
+        const uint64_t previous = m_timeLastDump;
+        // A diagnostic sink may write into this trace. Release its lock first.
+        lock.unlock();
+        VL_PRINTF_MT(3,
+                     "%%Warning: previous dump at t=%" PRIu64 ", requesting t=%" PRIu64
                      ", dump call ignored\n",
-                     m_timeLastDump, timeui);
+                     previous, timeui);
         return;
     }  // LCOV_EXCL_STOP
     m_timeLastDump = timeui;

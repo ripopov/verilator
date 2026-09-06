@@ -76,6 +76,8 @@ extern void VL_WARN_MT(const char* filename, int linenum, const char* hier,
 
 /// Print a string, multithread safe. Eventually VL_PRINTF will get called.
 extern void VL_PRINTF_MT(const char* formatp, ...) VL_ATTR_PRINTF(1) VL_MT_SAFE;
+/// Print a runtime diagnostic with explicit log severity (0..5).
+extern void VL_PRINTF_MT(uint8_t severity, const char* formatp, ...) VL_ATTR_PRINTF(2) VL_MT_SAFE;
 
 /// Print a debug message from internals with standard prefix, with printf style format
 extern void VL_DBG_MSGF(const char* formatp, ...) VL_ATTR_PRINTF(1) VL_MT_SAFE;
@@ -186,6 +188,14 @@ extern void VL_SFORMAT_NX(std::string& output, const char* formatp, int argc, ..
 extern std::string VL_SFORMATF_N_NX(const char* formatp, int argc, ...) VL_MT_SAFE;
 extern void VL_WRITEF_NX(const char* formatp, int argc, ...) VL_MT_SAFE;
 extern void VL_FWRITEF_NX(IData fpi, const char* formatp, int argc, ...) VL_MT_SAFE;
+
+// Structured severity survives lowering of SystemVerilog reporting tasks.
+extern void VL_LOG_WRITEF_NX(int severity, const char* formatp, int argc, ...) VL_MT_SAFE;
+extern void VL_LOG_WRITEF_NX(int severity, const std::string& format, int argc, ...) VL_MT_SAFE;
+extern void VL_FLOG_WRITEF_NX(int severity, IData fpi, const char* formatp, int argc,
+                              ...) VL_MT_SAFE;
+extern void VL_FLOG_WRITEF_NX(int severity, IData fpi, const std::string& format, int argc,
+                              ...) VL_MT_SAFE;
 
 extern void VL_STACKTRACE() VL_MT_SAFE;
 extern std::string VL_STACKTRACE_N() VL_MT_SAFE;

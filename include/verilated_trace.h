@@ -205,6 +205,8 @@ private:
     static void parallelWorkerTask(void*, bool);
 
 protected:
+    // Context of the connected models; tracing sinks must not use another thread's default.
+    VerilatedContext* traceContextp() const { return m_contextp; }
     uint32_t* m_sigs_oldvalp = nullptr;  // Previous value store
     EData* m_sigs_enabledp = nullptr;  // Bit vector of enabled codes (nullptr = all on)
 private:
