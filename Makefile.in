@@ -245,6 +245,10 @@ VL_INST_PUBLIC_BIN_FILES = \
   verilator_bin_dbg$(EXEEXT) \
   verilator_coverage_bin_dbg$(EXEEXT) \
 
+ifneq (@CMAKE@,)
+  VL_INST_PUBLIC_BIN_FILES += verilator_vdb_index$(EXEEXT)
+endif
+
 # Private executabels intended to be invoked by internals
 # Don't put wildcards in these variables, it might cause an uninstall of other stuff
 VL_INST_PRIVATE_SCRIPT_FILES = \

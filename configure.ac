@@ -249,6 +249,13 @@ fi
 python3_version=$($PYTHON3 --version | head -1)
 AC_MSG_RESULT([$PYTHON3 --version = $python3_version])
 
+# cmake builds verilator_vdb_index (src/vdb_index) against the pinned slang
+# submodule; without it --trace-vtr VDB companions carry no source index.
+AC_CHECK_PROG(CMAKE,cmake,cmake)
+if test "x$CMAKE" = "x" ; then
+   AC_MSG_WARN([cmake not found; verilator_vdb_index will not be built])
+fi
+
 AC_CHECK_PROG(LEX,flex,flex)
 if test "x$LEX" = "x" ; then
    AC_MSG_ERROR([Cannot find "flex" in your PATH, please install it])

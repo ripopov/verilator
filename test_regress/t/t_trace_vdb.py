@@ -23,7 +23,14 @@ db = json.loads(path.read_text())
 assert db['format'] == 'vtr-rtl-vdb' and db['version'] == 2
 assert db['top'] == 't'
 identity = db.pop('design_id')
+index = db.pop('source_index')
 assert identity == hashlib.sha256(json.dumps(db, separators=(',', ':')).encode()).hexdigest()
+assert index['producer'].startswith('slang ')
+assert index['classes'][0] == 'keyword' and index['modifiers'][0] == 'declaration'
+source = next(f for f in index['files'] if f['path'].endswith('t_trace_vdb.v'))
+assert len(source['tokens']) % 5 == 0 and len(source['tokens']) > 100
+assert len(source['declarations']) % 4 == 0 and source['declarations']
+assert {'t', 'stage'} <= set(index['definitions'])
 instances = {i['path']: i for i in db['instances']}
 assert set(instances) == {'t', 't.u', 't.lanes[0].v', 't.lanes[1].v'}
 assert instances['t.u']['definition'] == 'stage'

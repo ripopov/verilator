@@ -85,6 +85,9 @@ VL_DEFINE_DEBUG_FUNCTIONS;
 # include <sys/wait.h>  // Needed on FreeBSD for WIFEXITED
 # include <unistd.h>  // usleep
 #endif
+#if defined(__APPLE__)
+# include <mach-o/dyld.h>  // _NSGetExecutablePath
+#endif
 // clang-format on
 
 #define VL_ALLOW_VERILATEDOS_C
@@ -251,6 +254,19 @@ string V3Os::filenameRealPath(const string& filename) VL_PURE {
         return std::string{retpath};
     }
     return filename;
+}
+
+string V3Os::selfExecutable() {
+#if defined(__linux__)
+    char path[PATH_MAX];
+    const ssize_t len = readlink("/proc/self/exe", path, sizeof(path) - 1);
+    if (len > 0) return string{path, static_cast<size_t>(len)};
+#elif defined(__APPLE__)
+    char path[PATH_MAX];
+    uint32_t size = sizeof(path);
+    if (_NSGetExecutablePath(path, &size) == 0) return filenameRealPath(path);
+#endif
+    return "";
 }
 
 string V3Os::filenameRelativePath(const string& filename, const string& base) VL_PURE {

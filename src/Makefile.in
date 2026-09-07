@@ -20,6 +20,8 @@
 srcdir = @srcdir@
 EXEEXT = @EXEEXT@
 PYTHON3 = @PYTHON3@
+CMAKE = @CMAKE@
+CXX = @CXX@
 # VPATH only does sources; fix install_test's not creating ../bin
 vpath %.h @srcdir@
 
@@ -87,6 +89,26 @@ dbg: ../bin/verilator_bin_dbg$(EXEEXT) ../bin/verilator_coverage_bin_dbg$(EXEEXT
 ../bin/verilator_coverage_bin_dbg$(EXEEXT): obj_dbg ../bin prefiles
 	$(MAKE) -C obj_dbg       TGT=../$@ VL_DEBUG=1 VL_VLCOV=1 -f ../Makefile_obj serial_vlcov
 	$(MAKE) -C obj_dbg       TGT=../$@ VL_DEBUG=1 VL_VLCOV=1 -f ../Makefile_obj
+
+#*********************************************************************
+# verilator_vdb_index: elaborates --trace-vtr designs with the pinned slang
+# submodule (ext/slang) and appends the source index to VDB companions.
+# Installed beside verilator_bin, which runs it from its own directory.
+
+VDB_INDEX = ../bin/verilator_vdb_index$(EXEEXT)
+.PHONY: $(VDB_INDEX) vdb_index_test
+ifneq ($(CMAKE),)
+opt dbg: $(VDB_INDEX)
+endif
+$(VDB_INDEX): ../bin
+	$(CMAKE) -S $(srcdir)/vdb_index -B obj_vdb_index -G "Unix Makefiles" \
+	  -DCMAKE_BUILD_TYPE=Release -DCMAKE_CXX_COMPILER="$(CXX)"
+	$(MAKE) -C obj_vdb_index verilator_vdb_index
+	cp -p obj_vdb_index/verilator_vdb_index$(EXEEXT) $@
+
+vdb_index_test: $(VDB_INDEX)
+	$(MAKE) -C obj_vdb_index vdb_index_test
+	obj_vdb_index/vdb_index_test
 
 ifneq ($(VERILATOR_NO_OPT_BUILD),1)  # Faster laptop development... don't rebuild each commit
   ifneq ($(UNDER_GIT),)  # If local git tree... else don't burden users

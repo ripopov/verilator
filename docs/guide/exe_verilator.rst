@@ -2008,6 +2008,17 @@ Summary:
    the VTR project's ``vtr-vdb`` tool for source navigation, module netlist
    SVGs and temporal driver tracing.
 
+   After writing the companion, Verilator runs ``verilator_vdb_index`` from
+   the directory holding ``verilator_bin``. That program (``src/vdb_index``)
+   elaborates the same file set with the slang frontend pinned under
+   ``ext/slang`` and appends a ``source_index`` member: every token of every
+   source file with a class, modifiers and the declaration it denotes, the
+   declaration of each module, interface and package, and the generate blocks
+   each instance leaves uninstantiated. Viewers render sources from this index
+   alone; nothing is elaborated at viewing time. The index is not part of the
+   design identity. A missing or failing program raises :option:`VDBINDEX` and
+   the VDB is written without the index.
+
    Source semantics are preserved before optimization. Unsupported evaluation
    constructs retain connectivity and diagnostics. Trace depth and filtering
    can leave signals unavailable in the recording. Each VTR/VDB recording

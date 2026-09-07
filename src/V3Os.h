@@ -87,6 +87,8 @@ public:
     // METHODS (sub command)
     /// Run system command, returns the exit code of the child process.
     static int system(const string& command);
+    /// Path of the running executable, or empty when the platform cannot tell
+    static string selfExecutable();
     static void selfTest();
 };
 

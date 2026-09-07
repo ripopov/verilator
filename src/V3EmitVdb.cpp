@@ -18,6 +18,7 @@
 #include "V3Stats.h"
 #include "V3String.h"
 
+#include <cctype>
 #include <fstream>
 #include <sstream>
 
@@ -526,6 +527,49 @@ class VdbEmitter final {
     }
 
 public:
+    // Appends the slang-based source index (src/vdb_index) to the written
+    // document and re-reads it, so the model embeds the indexed companion. The
+    // index is outside the design identity; a missing or failing tool only warns.
+    static void indexSources(const string& filename) {
+        const string self = V3Os::selfExecutable();
+        const string bin = self.empty() ? v3Global.opt.buildDepBin() : self;
+        const string tool = V3Os::filenameDir(bin) + "/verilator_vdb_index";
+        if (!std::ifstream{tool}.good()) {
+            v3warn(VDBINDEX, "VDB source index skipped: verilator_vdb_index not found beside "
+                                 << bin);
+            return;
+        }
+        const auto quote = [](const string& text) {
+            string out = "'";
+            for (const char c : text) {
+                if (c == '\'') {
+                    out += "'\\''";
+                } else {
+                    out += c;
+                }
+            }
+            return out + "'";
+        };
+        const int status = V3Os::system(quote(tool) + " " + quote(filename));
+        if (status != 0) {
+            v3warn(VDBINDEX, "VDB source index skipped: verilator_vdb_index exited with status "
+                                 << status);
+            return;
+        }
+        std::ifstream in{filename, std::ios::binary};
+        std::stringstream buffer;
+        buffer << in.rdbuf();
+        string updated = buffer.str();
+        while (!updated.empty() && std::isspace(static_cast<unsigned char>(updated.back()))) {
+            updated.pop_back();
+        }
+        if (updated.empty() || updated.back() != '}') {
+            v3warn(VDBINDEX, "VDB source index skipped: indexed document is not a JSON object");
+            return;
+        }
+        v3Global.vdbDocument(updated);
+    }
+
     void emit() {
         const AstNodeModule* const topp = v3Global.rootp()->topModulep();
         indexPaths(topp, topp->origName());
@@ -582,8 +626,11 @@ public:
         v3Global.vdbDocument(doc);
         v3Global.vdbId(id);
         const string filename = v3Global.opt.makeDir() + '/' + v3Global.opt.prefix() + ".vdb.json";
-        const std::unique_ptr<std::ofstream> outp{V3File::new_ofstream(filename)};
-        *outp << doc << '\n';
+        {
+            const std::unique_ptr<std::ofstream> outp{V3File::new_ofstream(filename)};
+            *outp << doc << '\n';
+        }
+        indexSources(filename);
         V3Stats::addStat("VDB, symbols", m_symbols.size());
         V3Stats::addStat("VDB, instances", m_instances.size());
         V3Stats::addStat("VDB, processes", m_processes.size());

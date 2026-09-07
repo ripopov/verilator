@@ -2623,6 +2623,19 @@ List Of Warnings
    To resolve this, rename the inner or outer variable to an unique name.
 
 
+.. option:: VDBINDEX
+
+   Warns that the RTL VDB companion written by :vlopt:`--trace-vtr` carries
+   no source index. Verilator runs ``verilator_vdb_index`` from the directory
+   holding ``verilator_bin``; the warning reports that the program is missing
+   or that it failed. The tool elaborates the design a second time with the
+   pinned slang frontend to classify every source token; without it the VDB
+   still supports every ``vtr-vdb`` query, but design browsers show sources
+   without highlighting, navigation or instance context.
+
+   Ignoring this warning will only affect source display in viewers.
+
+
 .. option:: WAITCONST
 
    Warns that a `wait` statement awaits a constant condition, which means it
