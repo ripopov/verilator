@@ -61,9 +61,14 @@ private:
     uint32_t* m_signalp = nullptr;  // same as m_code2signal, but as an array
     uint64_t m_timeui = 0;  // Time to emit, 0 = not needed
 
-    // Prefixes to add to signal names/scope types
-    std::vector<std::pair<std::string, VerilatedTracePrefixType>> m_prefixStack{
-        {"", VerilatedTracePrefixType::SCOPE_MODULE}};
+    // Open prefixes: signal name prefix, prefix type and the VTR scope node that
+    // declarations at this level go under (0xFFFFFFFF = VTR_NONE, the root)
+    struct Prefix final {
+        std::string name;
+        VerilatedTracePrefixType type;
+        uint32_t node;
+    };
+    std::vector<Prefix> m_prefixStack{{"", VerilatedTracePrefixType::SCOPE_MODULE, 0xFFFFFFFFu}};
 
     // CONSTRUCTORS
     VL_UNCOPYABLE(VerilatedVtr);
