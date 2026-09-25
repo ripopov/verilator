@@ -895,6 +895,10 @@ string V3Options::getStdPackagePath() {
 string V3Options::getStdWaiverPath() {
     return V3Os::filenameJoin(getenvVERILATOR_ROOT(), "include", "verilated_std_waiver.vlt");
 }
+string V3Options::getVtrTracePackagePath() {
+    // Installed from the VTR revision the fork was built with (integrations/verilator/build.sh)
+    return V3Os::filenameJoin(getenvVERILATOR_ROOT(), "include", "vtr", "vtr_trace.sv");
+}
 
 string V3Options::getSupported(const string& var) {
     // If update below, also update V3Options::showVersion()

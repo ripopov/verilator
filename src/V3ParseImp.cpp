@@ -894,6 +894,10 @@ void V3ParseImp::tokenPipelineSym() {
     if (token == yRANDOMIZE) importIfInStd(yylval.fl, "randomize", false);
     if (token == yaID__ETC || token == yaID__CC || token == yaID__LEX || token == yaID__aTYPE) {
         importIfInStd(yylval.fl, *(yylval.strp), true);
+        if (!v3Global.usesVtrTracePackage() && *(yylval.strp) == "vtr_trace"
+            && yylval.fl->filename() != V3Options::getVtrTracePackagePath()) {
+            v3Global.setUsesVtrTracePackage();
+        }
         if (token == yaID__LEX) {
             if (VString::startsWith(*(yylval.strp), "PATHPULSE__024")) {
                 token = yaID__PATHPULSE;

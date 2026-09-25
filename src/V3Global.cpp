@@ -30,6 +30,8 @@
 #include "V3Stats.h"
 #include "V3ThreadPool.h"
 
+#include <fstream>
+
 VL_DEFINE_DEBUG_FUNCTIONS;
 
 //######################################################################
@@ -106,6 +108,14 @@ void V3Global::readFiles() {
                 "Cannot find verilated_std.sv containing built-in std:: definitions: ");
         }
 
+        // Parse the vtr_trace package; removeVtrTrace() drops it again when unused
+        if (v3Global.opt.traceEnabledVtr()
+            && std::ifstream{V3Options::getVtrTracePackagePath()}.good()) {
+            parser.parseFile(new FileLine{V3Options::getVtrTracePackagePath()},
+                             V3Options::getVtrTracePackagePath(), false, false, "work",
+                             "Cannot find vtr_trace.sv containing the vtr_trace package: ");
+        }
+
         // Parse libmap files
         for (const string& filename : v3Global.opt.libmapFiles()) {
             parser.parseFile(new FileLine{FileLine::commandLineFilename()}, filename, false, true,
@@ -159,6 +169,22 @@ void V3Global::removeStd() {
             v3Global.rootp()->stdPackagep(nullptr);
             v3Global.rootp()->stdPackageProcessp(nullptr);
             VL_DO_DANGLING(stdp->unlinkFrBack()->deleteTree(), stdp);
+        }
+    }
+}
+
+void V3Global::removeVtrTrace() {
+    // Delete the vtr_trace package unless the design names it, so that a design using
+    // nothing from it generates the same model as without --trace-vtr's package
+    if (usesVtrTracePackage()) return;
+    const string path = V3Options::getVtrTracePackagePath();
+    V3File::removeSrcDepend(path);
+    for (AstNode *nodep = v3Global.rootp()->modulesp(), *nextp; nodep; nodep = nextp) {
+        nextp = nodep->nextp();
+        if (VN_IS(nodep, Package) && nodep->name() == "vtr_trace"
+            && nodep->fileline()->filename() == path) {
+            UINFO(3, "Removing unused vtr_trace package");
+            VL_DO_DANGLING(nodep->unlinkFrBack()->deleteTree(), nodep);
         }
     }
 }
@@ -249,6 +275,8 @@ std::vector<std::string> V3Global::verilatedCppFiles() {
         result.emplace_back("verilated_covergroup.cpp");
     for (const string& base : v3Global.opt.traceSourceBases())
         result.emplace_back(base + "_c.cpp");
+    // DPI bodies of the vtr_trace package over the VTR trace sink
+    if (v3Global.opt.traceEnabledVtr()) result.emplace_back("verilated_vtr_dpi.cpp");
     if (v3Global.usesProbDist()) result.emplace_back("verilated_probdist.cpp");
     if (v3Global.usesTiming()) result.emplace_back("verilated_timing.cpp");
     if (v3Global.useRandomizeMethods()) result.emplace_back("verilated_random.cpp");

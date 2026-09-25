@@ -833,6 +833,7 @@ public:
     static string getenvVERILATOR_SOLVER();
     static string getStdPackagePath();
     static string getStdWaiverPath();
+    static string getVtrTracePackagePath();
     static string getSupported(const string& var);
     static bool systemCSystemWide();
     static bool systemCFound();  // SystemC installed, or environment points to it

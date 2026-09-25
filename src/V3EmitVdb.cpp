@@ -576,6 +576,9 @@ public:
         instance(topp, topp->origName(), "", nullptr);
         Items sources;
         for (const string& file : FileLine::filenames()) {
+            // A vtr_trace package the design does not name was removed after parsing
+            if (!v3Global.usesVtrTracePackage() && file == V3Options::getVtrTracePackagePath())
+                continue;
             std::ifstream stream{file, std::ios::binary};
             if (!stream) continue;
             const string bytes{std::istreambuf_iterator<char>{stream},

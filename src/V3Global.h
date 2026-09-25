@@ -126,6 +126,7 @@ class V3Global final {
     bool m_hasVirtIfaces = false;  // Design uses virtual interfaces
     bool m_usesProbDist = false;  // Uses $dist_*
     bool m_usesStdPackage = false;  // Design uses the std package
+    bool m_usesVtrTracePackage = false;  // Design names the vtr_trace package (--trace-vtr)
     bool m_usesTiming = false;  // Design uses timing constructs
     bool m_usesForce = false;  // Design uses force/release statements
     bool m_usesZeroDelay = false;  // Design uses #0 delay (or non-constant delay)
@@ -175,6 +176,7 @@ public:
     // METHODS
     void readFiles() VL_MT_DISABLED;
     void removeStd() VL_MT_DISABLED;
+    void removeVtrTrace() VL_MT_DISABLED;
     void checkTree() const;
     static void dumpCheckGlobalTree(const string& stagename, int newNumber = 0, bool doDump = true,
                                     bool doCheck = true);
@@ -209,6 +211,8 @@ public:
     void setUsesProbDist() { m_usesProbDist = true; }
     bool usesStdPackage() const { return m_usesStdPackage; }
     void setUsesStdPackage() { m_usesStdPackage = true; }
+    bool usesVtrTracePackage() const { return m_usesVtrTracePackage; }
+    void setUsesVtrTracePackage() { m_usesVtrTracePackage = true; }
     bool usesTiming() const { return m_usesTiming; }
     void setUsesTiming() { m_usesTiming = true; }
     bool usesZeroDelay() const { return m_usesZeroDelay; }

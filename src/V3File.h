@@ -62,6 +62,8 @@ public:
 
     // Dependencies
     static void addSrcDepend(const string& filename) VL_MT_SAFE;
+    // Forget a source read but not used (the vtr_trace package of a design that names nothing in it)
+    static void removeSrcDepend(const string& filename) VL_MT_SAFE;
     static void addTgtDepend(const string& filename) VL_MT_SAFE;
     static void writeDepend(const string& filename);
     static std::vector<string> getAllDeps();

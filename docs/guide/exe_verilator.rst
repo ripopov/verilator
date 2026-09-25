@@ -1999,6 +1999,19 @@ Summary:
    callbacks. Non-UTF-8 output is recorded as ``[non-UTF-8 bytes]`` followed
    by hexadecimal bytes, preserving the original data. Compile-time diagnostics and arbitrary C++ stdout are not captured.
 
+   Makes the ``vtr_trace`` SystemVerilog package available without a source
+   file on the command line: Verilator parses ``include/vtr/vtr_trace.sv``,
+   installed from the VTR revision the build came from, and removes it again
+   when the design never names ``vtr_trace``, so such a design generates the
+   same model. Its DPI functions are implemented in
+   ``verilated_vtr_dpi.cpp`` over the open VTR trace; for example
+   ``vtr_clock("", "clk")`` declares a clock and ``vtr_clock_run`` /
+   ``vtr_clock_stop`` record its steady stretches. Calls made before the
+   trace opens are replayed when it opens, the trace may be opened without
+   registering the model's signals, and misuse is reported as warnings in the
+   simulation log when the trace closes. See ``docs/vtr_clocks.html`` in the
+   VTR repository.
+
    Also exports an experimental RTL VDB companion containing elaborated module
    hierarchy, specialized types, source locations, connections and processes.
    Verilation writes ``<Mdir>/<prefix>.vdb.json``. The generated model embeds

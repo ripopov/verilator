@@ -139,6 +139,16 @@ public:
             m_filenameList.insert(df);
         }
     }
+    void removeSrcDepend(const string& filename) VL_MT_SAFE_EXCLUDES(m_mutex) {
+        const V3LockGuard lock{m_mutex};
+        if (!m_filenameSet.erase(filename)) return;
+        for (auto it = m_filenameList.begin(); it != m_filenameList.end(); ++it) {
+            if (it->filename() == filename) {
+                m_filenameList.erase(it);
+                break;
+            }
+        }
+    }
     void addTgtDepend(const string& filename) VL_MT_SAFE_EXCLUDES(m_mutex) {
         const V3LockGuard lock{m_mutex};
         const auto itFoundPair = m_filenameSet.insert(filename);
@@ -326,6 +336,9 @@ bool V3FileDependImp::checkTimes(const string& filename, const string& cmdlineIn
 // V3File
 
 void V3File::addSrcDepend(const string& filename) VL_MT_SAFE { dependImp.addSrcDepend(filename); }
+void V3File::removeSrcDepend(const string& filename) VL_MT_SAFE {
+    dependImp.removeSrcDepend(filename);
+}
 void V3File::addTgtDepend(const string& filename) VL_MT_SAFE { dependImp.addTgtDepend(filename); }
 void V3File::writeDepend(const string& filename) { dependImp.writeDepend(filename); }
 std::vector<string> V3File::getAllDeps() { return dependImp.getAllDeps(); }

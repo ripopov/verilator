@@ -97,6 +97,31 @@ void VerilatedVtr::open(const char* filename) VL_MT_SAFE_EXCLUDES(m_mutex) {
     m_code2signal.clear();
     m_logContextp = Super::traceContextp() ? Super::traceContextp() : Verilated::threadContextp();
     m_logContextp->addLogCb(logCallback, this);
+    // Declarations made through the vtr_trace package so far are replayed now
+    packageOpened();
+}
+
+uint32_t VerilatedVtr::scopeNode(const std::string& path) {
+    if (path.empty()) return VTR_NONE;
+    const auto it = m_scopeNodes.find(path);
+    if (it != m_scopeNodes.end()) return it->second;
+    const size_t dot = path.rfind('.');
+    const uint32_t parent = dot == std::string::npos ? VTR_NONE : scopeNode(path.substr(0, dot));
+    const std::string name = dot == std::string::npos ? path : path.substr(dot + 1);
+    const uint32_t node = vtr_writer_add_scope(m_vtr, parent, name.c_str(), 0, nullptr);
+    m_scopeNodes.emplace(path, node);
+    return node;
+}
+
+void VerilatedVtr::warn(const std::string& text) {
+    VL_PRINTF("%%Warning-VTRTRACE: %s\n", text.c_str());  // Not _MT: logged below, once
+    vtr_value value{};
+    value.tag = VTR_VAL_TEXT;
+    value.data = reinterpret_cast<const uint8_t*>(text.data());
+    value.len = text.size();
+    const VerilatedLockGuard lock{m_mutex};
+    const uint64_t time = m_logContextp ? m_logContextp->time() : 0;
+    vtr_writer_log(m_vtr, m_logSites[3], time, 0, 1, &value, nullptr);
 }
 
 namespace {
@@ -188,13 +213,19 @@ void VerilatedVtr::logCallback(void* data, uint8_t severity, uint64_t time,
 }
 
 void VerilatedVtr::close() VL_MT_SAFE_EXCLUDES(m_mutex) {
+    {
+        const VerilatedLockGuard lock{m_mutex};
+        Super::closeBase();
+        emitTimeChangeMaybe();
+    }
+    // The package ends its running clocks and logs its misuse counts before the file closes
+    packageClosing();
     const VerilatedLockGuard lock{m_mutex};
     if (m_logContextp) {
         m_logContextp->removeLogCb(logCallback, this);
         m_logContextp = nullptr;
     }
-    Super::closeBase();
-    emitTimeChangeMaybe();
+    m_scopeNodes.clear();
     if (m_vtr && vtr_writer_close(m_vtr) != VTR_OK) {
         VL_PRINTF_MT(4, "%%Error: VTR trace close failed: %s\n", vtr_last_error());
     }
@@ -243,13 +274,16 @@ void VerilatedVtr::pushPrefix(const char* namep, VerilatedTracePrefixType type, 
     // further down will be peers, not children (as usual for name()!="").
     const std::string prevPrefix = m_prefixStack.back().name;
     const uint32_t parent = m_prefixStack.back().node;
+    const std::string prevPath = m_prefixStack.back().path;
     if (name == "$rootio" && !prevPrefix.empty()) {
         // Upper has name, we can suppress inserting $rootio, but still push so popPrefix works
-        m_prefixStack.push_back({prevPrefix, VerilatedTracePrefixType::ROOTIO_WRAPPER, parent});
+        m_prefixStack.push_back(
+            {prevPrefix, VerilatedTracePrefixType::ROOTIO_WRAPPER, parent, prevPath});
         return;
     }
     if (name.empty()) {
-        m_prefixStack.push_back({prevPrefix, VerilatedTracePrefixType::ROOTIO_WRAPPER, parent});
+        m_prefixStack.push_back(
+            {prevPrefix, VerilatedTracePrefixType::ROOTIO_WRAPPER, parent, prevPath});
         return;
     }
 
@@ -278,7 +312,12 @@ void VerilatedVtr::pushPrefix(const char* namep, VerilatedTracePrefixType type, 
     default: break;
     }
     const uint32_t node = vtr_writer_add_scope(m_vtr, parent, namep, scopeType, nullptr);
-    m_prefixStack.push_back({newPrefix + (isProperScope ? " " : ""), type, node});
+    const std::string path = prevPath.empty() ? name : prevPath + "." + name;
+    m_prefixStack.push_back({newPrefix + (isProperScope ? " " : ""), type, node, path});
+    if (type == VerilatedTracePrefixType::SCOPE_MODULE
+        || type == VerilatedTracePrefixType::SCOPE_INTERFACE) {
+        m_scopeNodes.emplace(path, node);
+    }
     switch (type) {
     case VerilatedTracePrefixType::STRUCT_PACKED:
     case VerilatedTracePrefixType::UNION_PACKED:

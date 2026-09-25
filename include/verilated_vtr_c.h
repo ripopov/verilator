@@ -32,6 +32,7 @@
 struct vtr_writer;
 
 class VerilatedVtrBuffer;
+class VerilatedVtrPackageSink;
 
 //=============================================================================
 // VerilatedVtr
@@ -44,6 +45,7 @@ public:
 
 private:
     friend VerilatedVtrBuffer;  // Give the buffer access to the private bits
+    friend VerilatedVtrPackageSink;  // The vtr_trace package's sink (verilated_vtr_dpi.cpp)
 
     //=========================================================================
     // VTR-specific internals
@@ -52,6 +54,8 @@ private:
     VerilatedContext* m_logContextp = nullptr;  // Owns the registered sink until close
     uint32_t m_logSites[6]{};  // One generator per severity in the simulation log stream
     static void logCallback(void* data, uint8_t severity, uint64_t time, const std::string& text);
+    VerilatedVtrPackageSink* m_packagep = nullptr;  // vtr_trace package sink while open
+    std::map<std::string, uint32_t> m_scopeNodes;  // Instance path -> scope node
 
     const char* m_vdbDocumentp = nullptr;  // Static generated elaboration document
     std::string m_vdbPrefix;  // Model instance wrapper in the recording
@@ -67,8 +71,17 @@ private:
         std::string name;
         VerilatedTracePrefixType type;
         uint32_t node;
+        std::string path;  // '.'-joined instance path of `node`
     };
-    std::vector<Prefix> m_prefixStack{{"", VerilatedTracePrefixType::SCOPE_MODULE, 0xFFFFFFFFu}};
+    std::vector<Prefix> m_prefixStack{
+        {"", VerilatedTracePrefixType::SCOPE_MODULE, 0xFFFFFFFFu, ""}};
+    // Scope node of an instance path, created as module scopes when missing
+    uint32_t scopeNode(const std::string& path);
+    // Record a warning in the simulation log and on stdout
+    void warn(const std::string& text);
+    // Attach / detach the vtr_trace package (defined in verilated_vtr_dpi.cpp)
+    void packageOpened();
+    void packageClosing();
 
     // CONSTRUCTORS
     VL_UNCOPYABLE(VerilatedVtr);
