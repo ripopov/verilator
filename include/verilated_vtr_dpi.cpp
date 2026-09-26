@@ -69,7 +69,19 @@ vtr_trace::Runtime& runtimeOf(VerilatedContext* contextp) {
 
 }  // namespace
 
-vtr_trace::Runtime& vtr_trace::runtime() { return runtimeOf(Verilated::threadContextp()); }
+vtr_trace::Runtime& vtr_trace::runtime() {
+    // Every package call lands here: remember the calling thread's last context, so the
+    // global map and its mutex are only consulted when that context changes.
+    // Runtimes are never destroyed, so the pointer stays valid.
+    static thread_local const VerilatedContext* t_contextp = nullptr;
+    static thread_local vtr_trace::Runtime* t_runtimep = nullptr;
+    VerilatedContext* const contextp = Verilated::threadContextp();
+    if (VL_UNLIKELY(contextp != t_contextp)) {
+        t_runtimep = &runtimeOf(contextp);
+        t_contextp = contextp;
+    }
+    return *t_runtimep;
+}
 
 //=============================================================================
 // VerilatedVtrPackageSink: the open file as the package sees it
