@@ -64,7 +64,7 @@ private:
     std::map<void*, std::map<int, uint32_t>> m_local2vtrEnum;  // dtypenum -> enum table node
     uint32_t* m_signalp = nullptr;  // same as m_code2signal, but as an array
     uint64_t m_timeui = 0;  // Time to emit, 0 = not needed
-    bool m_guard = true;  // Watch the writer with VTR's crash guard
+    bool m_guard = false;  // Watch the writer with VTR's crash guard (opt-in)
     bool m_watched = false;  // The crash guard watches m_vtr
     uint64_t m_stopCb = 0;  // Crash guard stop callback
     static void stopCallback(void* selfp, int signal);
@@ -130,7 +130,7 @@ public:
     void flush() VL_MT_SAFE_EXCLUDES(m_mutex);
     // Return if file is open
     bool isOpen() const VL_MT_SAFE { return m_vtr != nullptr; }
-    // Watch the writer with VTR's crash guard (default); call before open()
+    // Watch the writer with VTR's crash guard (off by default); call before open()
     void guard(bool flag) { m_guard = flag; }
     // dump() with the writer marked busy for the crash guard: a crash elsewhere
     // stops this thread after the whole time step, not in the middle of it
@@ -290,8 +290,8 @@ public:
     /// Open a new VTR file
     virtual void open(const char* filename) VL_MT_SAFE { m_sptrace.open(filename); }
     /// Keep the trace when the simulation crashes, is stopped or calls exit()
-    /// (VTR's crash guard, on by default; VTR_GUARD=0 also turns it off).
-    /// Call before open().
+    /// (VTR's crash guard). Off by default; guard(true) or VTR_GUARD=1 turns it
+    /// on, VTR_GUARD=0 keeps it off. Call before open().
     void guard(bool flag) VL_MT_SAFE { m_sptrace.guard(flag); }
     /// Close dump
     void close() VL_MT_SAFE {

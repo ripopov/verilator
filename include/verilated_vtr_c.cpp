@@ -30,6 +30,8 @@
 #include "vtr.h"
 
 #include <cmath>
+#include <cstdlib>
+#include <cstring>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -63,6 +65,11 @@ void VerilatedVtr::open(const char* filename) VL_MT_SAFE_EXCLUDES(m_mutex) {
     // Verilator only hands over values that differ from the previous dump,
     // so the writer's own comparison would be redundant work.
     opts.dedup = 0;
+    // Crash safety is opt-in: guard(true) or VTR_GUARD=1 (VTR_GUARD=0 always wins).
+    const char* const envp = std::getenv("VTR_GUARD");
+    const bool guard = m_guard || (envp && std::strcmp(envp, "1") == 0);
+    // A guarded trace also bounds what SIGKILL can take: nothing waits more than 10 s.
+    if (guard) opts.commit_interval_ms = 10000;
     m_vtr = vtr_writer_create(filename, &opts);
     if (!m_vtr) {
         VL_PRINTF_MT(4, "%%Error: VTR trace open failed: %s: %s\n", filename, vtr_last_error());
@@ -71,7 +78,7 @@ void VerilatedVtr::open(const char* filename) VL_MT_SAFE_EXCLUDES(m_mutex) {
     // VTR's crash guard (one per process) finishes the file if the simulation crashes, is
     // stopped or calls exit(); the process still ends with the same signal or status.
     int guarded = 0;
-    if (m_guard && vtr_guard_install(nullptr, &guarded) == VTR_OK && guarded
+    if (guard && vtr_guard_install(nullptr, &guarded) == VTR_OK && guarded
         && vtr_guard_watch(m_vtr) == VTR_OK) {
         m_watched = true;
         m_stopCb = vtr_guard_add_stop_callback(stopCallback, this);
@@ -118,10 +125,11 @@ void VerilatedVtr::stopCallback(void* selfp, int /*signal*/) {
 }
 
 void VerilatedVtr::guardedDump(uint64_t timeui) {
+    if (!m_watched) return dump(timeui);  // Unguarded: no mark, no cost
     vtr_writer* const writerp = m_vtr;
-    const uint32_t prev = writerp ? vtr_writer_enter(writerp) : 0;
+    const uint32_t prev = vtr_writer_enter(writerp);
     dump(timeui);
-    if (writerp) vtr_writer_leave(writerp, prev);
+    vtr_writer_leave(writerp, prev);
 }
 
 uint32_t VerilatedVtr::scopeNode(const std::string& path) {
