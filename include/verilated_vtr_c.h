@@ -64,6 +64,10 @@ private:
     std::map<void*, std::map<int, uint32_t>> m_local2vtrEnum;  // dtypenum -> enum table node
     uint32_t* m_signalp = nullptr;  // same as m_code2signal, but as an array
     uint64_t m_timeui = 0;  // Time to emit, 0 = not needed
+    bool m_guard = true;  // Watch the writer with VTR's crash guard
+    bool m_watched = false;  // The crash guard watches m_vtr
+    uint64_t m_stopCb = 0;  // Crash guard stop callback
+    static void stopCallback(void* selfp, int signal);
 
     // Open prefixes: signal name prefix, prefix type and the VTR scope node that
     // declarations at this level go under (0xFFFFFFFF = VTR_NONE, the root)
@@ -126,6 +130,11 @@ public:
     void flush() VL_MT_SAFE_EXCLUDES(m_mutex);
     // Return if file is open
     bool isOpen() const VL_MT_SAFE { return m_vtr != nullptr; }
+    // Watch the writer with VTR's crash guard (default); call before open()
+    void guard(bool flag) { m_guard = flag; }
+    // dump() with the writer marked busy for the crash guard: a crash elsewhere
+    // stops this thread after the whole time step, not in the middle of it
+    void guardedDump(uint64_t timeui);
 
     //=========================================================================
     // Internal interface to Verilator generated code
@@ -280,6 +289,10 @@ public:
     bool isOpen() const override VL_MT_SAFE { return m_sptrace.isOpen(); }
     /// Open a new VTR file
     virtual void open(const char* filename) VL_MT_SAFE { m_sptrace.open(filename); }
+    /// Keep the trace when the simulation crashes, is stopped or calls exit()
+    /// (VTR's crash guard, on by default; VTR_GUARD=0 also turns it off).
+    /// Call before open().
+    void guard(bool flag) VL_MT_SAFE { m_sptrace.guard(flag); }
     /// Close dump
     void close() VL_MT_SAFE {
         m_sptrace.close();
@@ -290,7 +303,7 @@ public:
     /// Write one cycle of dump data
     /// Call with the current context's time just after eval'ed,
     /// e.g. ->dump(contextp->time())
-    void dump(uint64_t timeui) { m_sptrace.dump(timeui); }
+    void dump(uint64_t timeui) { m_sptrace.guardedDump(timeui); }
     /// Write one cycle of dump data - backward compatible and to reduce
     /// conversion warnings.  It's better to use a uint64_t time instead.
     void dump(double timestamp) { dump(static_cast<uint64_t>(timestamp)); }

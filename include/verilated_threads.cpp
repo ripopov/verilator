@@ -109,9 +109,18 @@ void VlWorkerThread::wait() {
     while (!flag.load()) std::this_thread::yield();
 }
 
+// A trace library may give worker threads what crash handling needs (VTR's
+// crash guard: an alternate signal stack); weak, so other builds need nothing.
+#if defined(__GNUC__) && !defined(_WIN32)
+extern "C" void vtr_guard_thread_init(void) __attribute__((weak));
+#endif
+
 void VlWorkerThread::main() {
     // Initialize thread_locals
     Verilated::threadContextp(m_contextp);
+#if defined(__GNUC__) && !defined(_WIN32)
+    if (vtr_guard_thread_init) vtr_guard_thread_init();
+#endif
     // One work item
     ExecRec work;
     // Wait for the first task without spinning, in case the thread is never actually used.
