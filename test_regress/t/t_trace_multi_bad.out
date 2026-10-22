@@ -1,3 +1,3 @@
-%Error: Only one of --trace-fst, --trace-saif or --trace--vcd may be used
+%Error: Only --trace-vcd and --trace-vtr may be combined; other trace formats are exclusive
         ... See the manual at https://verilator.org/verilator_doc.html?v=latest for more assistance.
 %Error: Exiting due to

@@ -663,7 +663,8 @@ public:
     int traceMaxArray() const { return m_traceMaxArray; }
     int traceMaxWidth() const { return m_traceMaxWidth; }
     bool useTraceParallel() const {
-        return trace() && traceEnabledVcd() && (threads() > 1 || hierChild() > 1);
+        return trace() && (traceEnabledVcd() || traceEnabledVtr())
+               && (threads() > 1 || hierChild() > 1);
     }
     int unrollCount() const { return m_unrollCount; }
     int unrollLimit() const { return m_unrollLimit; }

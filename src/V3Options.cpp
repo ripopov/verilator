@@ -1018,9 +1018,9 @@ void V3Options::notify() VL_MT_DISABLED {
         m_trace = true;
     const int ntraces
         = traceEnabledFst() + traceEnabledSaif() + traceEnabledVcd() + traceEnabledVtr();
-    if (ntraces > 1)  // Issue #5813
+    if (ntraces > 1 && !(ntraces == 2 && traceEnabledVcd() && traceEnabledVtr()))
         cmdfl->v3error(
-            "Only one of --trace-fst, --trace-saif, --trace-vcd or --trace-vtr may be used");
+            "Only --trace-vcd and --trace-vtr may be combined; other trace formats are exclusive");
 
     if (protectIds()) {
         if (allPublic()) {

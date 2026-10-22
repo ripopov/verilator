@@ -24,12 +24,15 @@
 #include "verilated.h"
 #include "verilated_trace.h"
 
+#include "vtr_writer.h"
+
+#include <exception>
 #include <map>
+#include <memory>
 #include <string>
+#include <thread>
 #include <utility>
 #include <vector>
-
-struct vtr_writer;
 
 class VerilatedVtrBuffer;
 class VerilatedVtrPackageSink;
@@ -50,42 +53,50 @@ private:
     //=========================================================================
     // VTR-specific internals
 
-    vtr_writer* m_vtr = nullptr;
+    vtr::WriterOptions m_options;
+    std::unique_ptr<vtr::Writer> m_vtr;
+    std::optional<vtr::ProducerId> m_producer;
+    vtr::WriterStats m_lastStats;
+    uint32_t m_recordingDepth = 0;
+    uint64_t m_recordingTime = 0;
     VerilatedContext* m_logContextp = nullptr;  // Owns the registered sink until close
-    uint32_t m_logSites[6]{};  // One generator per severity in the simulation log stream
+    std::array<std::optional<vtr::Source<std::string_view, vtr::SourceKind::log>>, 6> m_logSites;
     static void logCallback(void* data, uint8_t severity, uint64_t time, const std::string& text);
     VerilatedVtrPackageSink* m_packagep = nullptr;  // vtr_trace package sink while open
-    std::map<std::string, uint32_t> m_scopeNodes;  // Instance path -> scope node
+    std::map<std::string, vtr::ScopeId> m_scopeNodes;
 
-    const char* m_vdbDocumentp = nullptr;  // Static generated elaboration document
+    const char* m_vdbDocumentp = nullptr;  // Static zlib-compressed elaboration document
+    size_t m_vdbCompressedBytes = 0;
+    uint64_t m_vdbDecodedBytes = 0;
     std::string m_vdbPrefix;  // Model instance wrapper in the recording
     std::map<std::string, std::string> m_vdbMapping;  // Original path -> recorded path
     std::map<uint32_t, uint32_t> m_code2signal;  // Verilator trace code -> VTR signal id
-    std::map<void*, std::map<int, uint32_t>> m_local2vtrEnum;  // dtypenum -> enum table node
+    std::map<void*, std::map<int, vtr::NodeId>> m_local2vtrEnum;
     uint32_t* m_signalp = nullptr;  // same as m_code2signal, but as an array
-    uint64_t m_timeui = 0;  // Time to emit, 0 = not needed
+    // Serial callbacks share one buffer for the lifetime of the open writer.
+    std::unique_ptr<Buffer> m_bufferp;
+    std::vector<std::unique_ptr<Buffer>> m_parallelBuffers;
+    std::thread::id m_dumpThread;
     bool m_guard = false;  // Watch the writer with VTR's crash guard (opt-in)
-    bool m_watched = false;  // The crash guard watches m_vtr
-    uint64_t m_stopCb = 0;  // Crash guard stop callback
-    static void stopCallback(void* selfp, int signal);
+    void enterRecording(uint64_t time);
+    void leaveRecording() noexcept;
 
-    // Open prefixes: signal name prefix, prefix type and the VTR scope node that
-    // declarations at this level go under (0xFFFFFFFF = VTR_NONE, the root)
     struct Prefix final {
         std::string name;
         VerilatedTracePrefixType type;
-        uint32_t node;
+        std::optional<vtr::ScopeId> node;
         std::string path;  // '.'-joined instance path of `node`
     };
-    std::vector<Prefix> m_prefixStack{
-        {"", VerilatedTracePrefixType::SCOPE_MODULE, 0xFFFFFFFFu, ""}};
+    std::vector<Prefix> m_prefixStack{{"", VerilatedTracePrefixType::SCOPE_MODULE, {}, ""}};
     // Scope node of an instance path, created as module scopes when missing
-    uint32_t scopeNode(const std::string& path);
+    std::optional<vtr::ScopeId> scopeNode(const std::string& path);
     // Record a warning in the simulation log and on stdout
     void warn(const std::string& text);
     // Attach / detach the vtr_trace package (defined in verilated_vtr_dpi.cpp)
     void packageOpened();
     void packageClosing();
+    void packageAbandon() noexcept;
+    [[noreturn]] void failed(const char* message);
 
     // CONSTRUCTORS
     VL_UNCOPYABLE(VerilatedVtr);
@@ -100,7 +111,6 @@ protected:
 
     // Called when the trace moves forward to a new time point
     void emitTimeChange(uint64_t timeui) override;
-    void emitTimeChangeMaybe();
 
     // Hooks called from VerilatedTrace
     bool preFullDump() override { return isOpen(); }
@@ -109,16 +119,14 @@ protected:
     // Trace buffer management
     Buffer* getTraceBuffer(uint32_t fidx) override;
     void commitTraceBuffer(Buffer*) override;
-
-    // Configure sub-class
-    void configure(const VerilatedTraceConfig&) override {}
+    bool supportsParallel() const override { return m_options.mode == vtr::ExecutionMode::threaded; }
 
 public:
     //=========================================================================
     // External interface to client code
 
     // CONSTRUCTOR
-    explicit VerilatedVtr(void* vtr = nullptr);
+    explicit VerilatedVtr(vtr::WriterOptions options = {});
     ~VerilatedVtr();
 
     // METHODS - All must be thread safe
@@ -130,17 +138,25 @@ public:
     void flush() VL_MT_SAFE_EXCLUDES(m_mutex);
     // Return if file is open
     bool isOpen() const VL_MT_SAFE { return m_vtr != nullptr; }
+    vtr::WriterStats stats() { return m_vtr ? m_vtr->stats() : m_lastStats; }
+    std::optional<uint64_t> backendCpuNanoseconds() const {
+        return m_vtr ? m_vtr->backend_cpu_nanoseconds() : m_lastStats.backend_cpu_nanoseconds;
+    }
+    static constexpr bool needsTraceMutex() { return false; }
+    static void runDumpCallback(dumpCb_t cb, void* userp, Buffer* bufp);
     // Watch the writer with VTR's crash guard (off by default); call before open()
     void guard(bool flag) { m_guard = flag; }
     // dump() with the writer marked busy for the crash guard: a crash elsewhere
     // stops this thread after the whole time step, not in the middle of it
     void guardedDump(uint64_t timeui);
+    void dump(uint64_t timeui) { guardedDump(timeui); }
 
     //=========================================================================
     // Internal interface to Verilator generated code
 
     /// Register the elaborated companion and shared identity during trace initialization.
-    void declVdb(const char* identityp, const char* documentp, const char* prefixp);
+    void declVdb(const char* identityp, const char* documentp, size_t compressedBytes,
+                 uint64_t decodedBytes, const char* prefixp);
     void pushPrefix(const char*, VerilatedTracePrefixType, int left = 0, int right = 0);
     void popPrefix();
 
@@ -180,37 +196,40 @@ public:
 };
 
 // We use macros to drop unused arguments at compile time. This saves code size.
-#define VL_TRACE_PUSH_PREFIX(tracep, name, type, left, right) \
+#define VL_TRACE_VTR_PUSH_PREFIX(tracep, name, type, left, right) \
     tracep->pushPrefix(name, type, left, right);
-#define VL_TRACE_POP_PREFIX(tracep) tracep->popPrefix();
+#define VL_TRACE_VTR_POP_PREFIX(tracep) tracep->popPrefix();
 
-#define VL_TRACE_DECL_EVENT(tracep, code, fidx, name, dtypenum, dir, kind, type) \
+#define VL_TRACE_VTR_DECL_EVENT(tracep, code, fidx, name, dtypenum, dir, kind, type) \
     tracep->declEvent(code, name, dtypenum, dir, kind, type)
-#define VL_TRACE_DECL_BIT(tracep, code, fidx, name, dtypenum, dir, kind, type) \
+#define VL_TRACE_VTR_DECL_BIT(tracep, code, fidx, name, dtypenum, dir, kind, type) \
     tracep->declBit(code, name, dtypenum, dir, kind, type)
-#define VL_TRACE_DECL_BUS(tracep, code, fidx, name, dtypenum, dir, kind, type, msb, lsb) \
+#define VL_TRACE_VTR_DECL_BUS(tracep, code, fidx, name, dtypenum, dir, kind, type, msb, lsb) \
     tracep->declBus(code, name, dtypenum, dir, kind, type, msb, lsb)
-#define VL_TRACE_DECL_QUAD(tracep, code, fidx, name, dtypenum, dir, kind, type, msb, lsb) \
+#define VL_TRACE_VTR_DECL_QUAD(tracep, code, fidx, name, dtypenum, dir, kind, type, msb, lsb) \
     tracep->declQuad(code, name, dtypenum, dir, kind, type, msb, lsb)
-#define VL_TRACE_DECL_WIDE(tracep, code, fidx, name, dtypenum, dir, kind, type, msb, lsb) \
+#define VL_TRACE_VTR_DECL_WIDE(tracep, code, fidx, name, dtypenum, dir, kind, type, msb, lsb) \
     tracep->declWide(code, name, dtypenum, dir, kind, type, msb, lsb)
-#define VL_TRACE_DECL_DOUBLE(tracep, code, fidx, name, dtypenum, dir, kind, type) \
+#define VL_TRACE_VTR_DECL_DOUBLE(tracep, code, fidx, name, dtypenum, dir, kind, type) \
     tracep->declDouble(code, name, dtypenum, dir, kind, type)
 
-#define VL_TRACE_DECL_EVENT_ARRAY(tracep, code, fidx, name, dtypenum, dir, kind, type, arraynum) \
+#define VL_TRACE_VTR_DECL_EVENT_ARRAY(tracep, code, fidx, name, dtypenum, dir, kind, type, \
+                                      arraynum) \
     tracep->declEventArray(code, name, dtypenum, dir, kind, type, arraynum)
-#define VL_TRACE_DECL_BIT_ARRAY(tracep, code, fidx, name, dtypenum, dir, kind, type, arraynum) \
+#define VL_TRACE_VTR_DECL_BIT_ARRAY(tracep, code, fidx, name, dtypenum, dir, kind, type, \
+                                    arraynum) \
     tracep->declBitArray(code, name, dtypenum, dir, kind, type, arraynum)
-#define VL_TRACE_DECL_BUS_ARRAY(tracep, code, fidx, name, dtypenum, dir, kind, type, arraynum, \
-                                msb, lsb) \
+#define VL_TRACE_VTR_DECL_BUS_ARRAY(tracep, code, fidx, name, dtypenum, dir, kind, type, \
+                                    arraynum, msb, lsb) \
     tracep->declBusArray(code, name, dtypenum, dir, kind, type, arraynum, msb, lsb)
-#define VL_TRACE_DECL_QUAD_ARRAY(tracep, code, fidx, name, dtypenum, dir, kind, type, arraynum, \
-                                 msb, lsb) \
+#define VL_TRACE_VTR_DECL_QUAD_ARRAY(tracep, code, fidx, name, dtypenum, dir, kind, type, \
+                                     arraynum, msb, lsb) \
     tracep->declQuadArray(code, name, dtypenum, dir, kind, type, arraynum, msb, lsb)
-#define VL_TRACE_DECL_WIDE_ARRAY(tracep, code, fidx, name, dtypenum, dir, kind, type, arraynum, \
-                                 msb, lsb) \
+#define VL_TRACE_VTR_DECL_WIDE_ARRAY(tracep, code, fidx, name, dtypenum, dir, kind, type, \
+                                     arraynum, msb, lsb) \
     tracep->declWideArray(code, name, dtypenum, dir, kind, type, arraynum, msb, lsb)
-#define VL_TRACE_DECL_DOUBLE_ARRAY(tracep, code, fidx, name, dtypenum, dir, kind, type, arraynum) \
+#define VL_TRACE_VTR_DECL_DOUBLE_ARRAY(tracep, code, fidx, name, dtypenum, dir, kind, type, \
+                                       arraynum) \
     tracep->declDoubleArray(code, name, dtypenum, dir, kind, type, arraynum)
 
 #ifndef DOXYGEN
@@ -241,9 +260,11 @@ class VerilatedVtrBuffer VL_NOT_FINAL {
     VerilatedVtr& m_owner;  // Trace file owning this buffer. Required by subclasses.
 
     // The VTR writer handle
-    vtr_writer* const m_vtr = m_owner.m_vtr;
+    vtr::Writer& m_vtr = *m_owner.m_vtr;
     // code to VTR signal map, as an array
     const uint32_t* const m_signalp = m_owner.m_signalp;
+    std::optional<vtr::ProducerId> m_producer;
+    std::exception_ptr m_error;
 
     // CONSTRUCTOR
     explicit VerilatedVtrBuffer(VerilatedVtr& owner)
@@ -277,9 +298,9 @@ class VerilatedVtrC VL_NOT_FINAL : public VerilatedTraceBaseC {
     VL_UNCOPYABLE(VerilatedVtrC);
 
 public:
-    /// Construct the dump. Optional argument is ignored.
-    explicit VerilatedVtrC(void* filep = nullptr)
-        : m_sptrace{filep} {}
+    /// Select inline execution or the SPSC backend before opening a recording.
+    explicit VerilatedVtrC(vtr::WriterOptions options = {})
+        : m_sptrace{std::move(options)} {}
     /// Destruct, flush, and close the dump
     virtual ~VerilatedVtrC() { close(); }
 
@@ -287,6 +308,10 @@ public:
 
     /// Return if file is open
     bool isOpen() const override VL_MT_SAFE { return m_sptrace.isOpen(); }
+    /// Worker CPU and queue statistics remain available after close.
+    vtr::WriterStats stats() { return m_sptrace.stats(); }
+    /// Sample worker CPU without waiting for trace ingestion.
+    std::optional<uint64_t> backendCpuNanoseconds() const { return m_sptrace.backendCpuNanoseconds(); }
     /// Open a new VTR file
     virtual void open(const char* filename) VL_MT_SAFE { m_sptrace.open(filename); }
     /// Keep the trace when the simulation crashes, is stopped or calls exit()

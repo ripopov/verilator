@@ -1983,6 +1983,10 @@ Summary:
    the model links against the VTR C library (see ``VTR_INCLUDE`` and
    ``VTR_LIBDIR`` in ``verilated.mk``).
 
+   May be combined with :vlopt:`--trace-vcd` to build one model supporting
+   either format. Select ``VerilatedVtrC`` or ``VerilatedVcdC`` in the C++
+   harness for each run. With both enabled, HDL dump tasks produce VCD.
+
    Records runtime SystemVerilog reporting tasks in one ``simulation_log``
    transaction stream, with one generator for each severity. Display, write,
    monitor, strobe and file-output tasks use info; ``$warning``, ``$error`` and
@@ -2041,6 +2045,8 @@ Summary:
 .. option:: --trace-vcd
 
    Adds waveform tracing code to the model using VCD format.
+
+   See :vlopt:`--trace-vtr` for selecting a format when both are enabled.
 
    Verilator will generate additional :file:`<prefix>__Trace*.cpp` files
    must be compiled. In addition :file:`verilated_vcd_sc.cpp` (for SystemC

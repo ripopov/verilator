@@ -96,6 +96,10 @@ class EmitCBaseVisitorConst VL_NOT_FINAL : public VNVisitorConst {
                                     ? static_cast<size_t>(v3Global.opt.outputSplit())
                                     : std::numeric_limits<size_t>::max();
 
+protected:
+    std::string m_traceClassBase;  // Concrete type for trace declarations and definitions
+
+private:
     // METHODS
 
     // Create new AstCFile and open it for writing

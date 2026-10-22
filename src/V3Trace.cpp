@@ -164,6 +164,22 @@ public:
 //######################################################################
 // Trace state, as a visitor of each AstNode
 
+class TraceDeclCallVisitor final : public VNVisitor {
+    void visit(AstTraceDecl* nodep) override {
+        if (AstCCall* const callp = nodep->dtypeCallp()) {
+            callp->argTypes(callp->argTypes() + ", " + cvtToStr(nodep->fidx()) + ", c+"
+                            + cvtToStr(nodep->code()) + ", "
+                            + nodep->declDirection().traceSigDirection());
+        }
+    }
+    void visit(AstNode* nodep) override { iterateChildren(nodep); }
+
+    explicit TraceDeclCallVisitor(AstNetlist* nodep) { iterateChildren(nodep); }
+
+public:
+    static void apply(AstNetlist* nodep) { TraceDeclCallVisitor{nodep}; }
+};
+
 class TraceVisitor final : public VNVisitor {
     // NODE STATE
     // V3Hasher in V3DupFinder
@@ -1178,6 +1194,7 @@ class TraceVisitor final : public VNVisitor {
 
         // Create the trace functions and insert them into the tree
         createTraceFunctions();
+        TraceDeclCallVisitor::apply(nodep);
 
         // Save number of trace codes used
         nodep->nTraceCodes(m_code);

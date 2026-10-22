@@ -355,10 +355,12 @@ public:
 
 class VerilatedContext VL_NOT_FINAL {
     friend class VerilatedContextImp;
+    friend class VerilatedVtrRuntime;
 
 private:
     using LogCallback = void (*)(void*, uint8_t, uint64_t, const std::string&);
     std::vector<std::pair<LogCallback, void*>> m_logCallbacks;  // Main evaluation thread only
+    std::unique_ptr<VerilatedVirtualBase> m_vtrRuntimep;
     // MEMBERS
     // Numer of assertion directive type members. Then each of them will represented as 1-bit in a
     // mask.

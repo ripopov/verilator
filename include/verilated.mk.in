@@ -216,13 +216,13 @@ ifneq ($(VM_TRACE_FST),)
 endif
 endif
 
-# VTR tracing needs the VTR C library (libvtr) and its header (vtr.h).
+# VTR tracing uses the C++20 VTR 3.1 library.
 # Set VTR_INCLUDE and VTR_LIBDIR (environment or make command line) to where they are installed.
 ifneq ($(VM_TRACE_VTR),0)
 ifneq ($(VM_TRACE_VTR),)
-    CPPFLAGS += $(addprefix -I, $(VTR_INCLUDE))
+    CPPFLAGS += -std=c++20 $(addprefix -I, $(VTR_INCLUDE))
     LDFLAGS += $(addprefix -L, $(VTR_LIBDIR))
-    LDLIBS += -lvtr
+    LDLIBS += -lvtr -llz4 -lzstd -lz
 endif
 endif
 

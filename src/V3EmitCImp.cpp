@@ -501,7 +501,8 @@ class EmitCTraceTypes final : public EmitCFunc {
     std::unordered_map<AstNode*, int> m_enumNumMap;  // EnumDType to enumeration number
     int m_traceTypeSubs = 0;  // Number of trace type declaration sub-functions
     V3UniqueNames m_uniqueNames;  // Generates unique file names
-    const std::string m_fileBaseName = EmitCUtil::topClassName() + "_" + protect("_TraceDecls");
+    const size_t m_format;
+    const std::string m_fileBaseName;
     // This one uses CSplitTrace for file splitting, which is incorrect but historically accurates
     const size_t m_splitLimit = v3Global.opt.outputSplitCTrace()
                                     ? static_cast<size_t>(v3Global.opt.outputSplitCTrace())
@@ -511,13 +512,11 @@ class EmitCTraceTypes final : public EmitCFunc {
         openNewOutputSourceFile(m_uniqueNames.get(m_fileBaseName), true, true,
                                 "Tracing declarations");
         puts("\n");
-        for (const std::string& base : v3Global.opt.traceSourceLangs()) {
-            puts("#include \"" + base + ".h\"\n");
-        }
+        puts("#include \"" + v3Global.opt.traceSourceLangs().at(m_format) + ".h\"\n");
         puts("\n");
         puts("\nvoid " + EmitCUtil::prefixNameProtect(m_modp) + "__"
              + protect("traceDeclTypesSub" + std::to_string(m_traceTypeSubs++)) + "("
-             + v3Global.opt.traceClassBase() + "* tracep) {\n");
+             + m_traceClassBase + "* tracep) {\n");
     }
 
 public:
@@ -569,7 +568,7 @@ public:
         puts("}\n");
 
         const std::string modName = EmitCUtil::prefixNameProtect(m_modp);
-        const std::string args = v3Global.opt.traceClassBase() + "* tracep";
+        const std::string args = m_traceClassBase + "* tracep";
 
         // Forward declarations for subs in other files
         for (int i = 0; i < m_traceTypeSubs - 1; ++i) {
@@ -588,7 +587,13 @@ public:
         closeOutputFile();
     }
 
-    EmitCTraceTypes() {
+    explicit EmitCTraceTypes(size_t format)
+        : m_format{format}
+        , m_fileBaseName{EmitCUtil::topClassName() + "_" + protect("_TraceDecls")
+                         + (v3Global.opt.traceClassBases().size() > 1
+                                ? "_" + v3Global.opt.traceClassBases().at(format)
+                                : "")} {
+        m_traceClassBase = v3Global.opt.traceClassBases().at(format);
         m_modp = v3Global.rootp()->topModulep();
         openNextOutputFile();
     }
@@ -601,18 +606,18 @@ class EmitCTrace final : public EmitCFunc {
 
     // MEMBERS
     const bool m_slow;  // Making slow file
-    const std::unique_ptr<EmitCTraceTypes> m_emitTypesp{m_slow ? new EmitCTraceTypes{} : nullptr};
+    const size_t m_format;
+    const std::unique_ptr<EmitCTraceTypes> m_emitTypesp;
     V3UniqueNames m_uniqueNames;  // Generates unique file names
-    const std::string m_fileBaseName = EmitCUtil::topClassName() + "_" + protect("_Trace");
+    const std::string m_fileBaseName;
+    const std::string m_traceMacroPrefix;
 
     // METHODS
     void openNextOutputFile() {
         openNewOutputSourceFile(m_uniqueNames.get(m_fileBaseName), m_slow, true,
                                 "Tracing implementation internals");
         puts("\n");
-        for (const std::string& base : v3Global.opt.traceSourceLangs()) {
-            puts("#include \"" + base + ".h\"\n");
-        }
+        puts("#include \"" + v3Global.opt.traceSourceLangs().at(m_format) + ".h\"\n");
         puts("#include \"" + EmitCUtil::symClassName() + ".h\"\n");
         puts("\n");
         // Need to emit new lazy declarations
@@ -644,25 +649,20 @@ class EmitCTrace final : public EmitCFunc {
         std::string direction;
         direction = nodep->declDirection().traceSigDirection();
 
-        AstCCall* const callp = nodep->dtypeCallp();
-        if (callp) {
-            callp->argTypes(callp->argTypes() + ", " + cvtToStr(nodep->fidx()) + ", c+"
-                            + cvtToStr(nodep->code()) + ", " + direction);
-            return;
-        }
+        if (nodep->dtypeCallp()) return;
 
         if (nodep->dtypep()->basicp()->isDouble()) {
-            puts("VL_TRACE_DECL_DOUBLE");
+            puts(m_traceMacroPrefix + "DECL_DOUBLE");
         } else if (nodep->isWide()) {
-            puts("VL_TRACE_DECL_WIDE");
+            puts(m_traceMacroPrefix + "DECL_WIDE");
         } else if (nodep->isQuad()) {
-            puts("VL_TRACE_DECL_QUAD");
+            puts(m_traceMacroPrefix + "DECL_QUAD");
         } else if (nodep->bitRange().ranged()) {
-            puts("VL_TRACE_DECL_BUS");
+            puts(m_traceMacroPrefix + "DECL_BUS");
         } else if (nodep->dtypep()->basicp()->isEvent()) {
-            puts("VL_TRACE_DECL_EVENT");
+            puts(m_traceMacroPrefix + "DECL_EVENT");
         } else {
-            puts("VL_TRACE_DECL_BIT");
+            puts(m_traceMacroPrefix + "DECL_BIT");
         }
 
         if (nodep->arrayRange().ranged()) {
@@ -728,7 +728,7 @@ class EmitCTrace final : public EmitCFunc {
 
     int emitTraceDeclDType(AstNodeDType* nodep) {
         // Return enum number or -1 for none
-        if (v3Global.opt.traceEnabledFst() || v3Global.opt.traceEnabledVtr()) {
+        if (m_traceClassBase == "VerilatedFst" || m_traceClassBase == "VerilatedVtr") {
             // Skip over refs-to-refs, but stop before final ref so can get data type name
             // Alternatively back in V3Width we could push enum names from upper typedefs
             if (AstEnumDType* const enump = VN_CAST(nodep->skipRefToEnump(), EnumDType)) {
@@ -840,7 +840,7 @@ class EmitCTrace final : public EmitCFunc {
         EmitCFunc::visit(nodep);
     }
     void visit(AstTracePushPrefix* nodep) override {
-        putns(nodep, "VL_TRACE_PUSH_PREFIX(tracep, ");
+        putns(nodep, m_traceMacroPrefix + "PUSH_PREFIX(tracep, ");
         if (nodep->quotedPrefix()) {
             putsQuoted(VIdProtect::protectWordsIf(nodep->prefix(), nodep->protect()));
         } else {
@@ -853,7 +853,7 @@ class EmitCTrace final : public EmitCFunc {
         puts(");\n");
     }
     void visit(AstTracePopPrefix* nodep) override {  //
-        putns(nodep, "VL_TRACE_POP_PREFIX(tracep);\n");
+        putns(nodep, m_traceMacroPrefix + "POP_PREFIX(tracep);\n");
     }
     void visit(AstTraceDecl* nodep) override {
         const int enumNum = emitTraceDeclDType(nodep->dtypep());
@@ -878,8 +878,19 @@ class EmitCTrace final : public EmitCFunc {
         }
     }
 
-    explicit EmitCTrace(bool slow)
-        : m_slow{slow} {
+    explicit EmitCTrace(bool slow, size_t format)
+        : m_slow{slow}
+        , m_format{format}
+        , m_emitTypesp{slow ? new EmitCTraceTypes{format} : nullptr}
+        , m_fileBaseName{EmitCUtil::topClassName() + "_" + protect("_Trace")
+                         + (v3Global.opt.traceClassBases().size() > 1
+                                ? "_" + v3Global.opt.traceClassBases().at(format)
+                                : "")}
+        , m_traceMacroPrefix{"VL_TRACE_"
+                             + VString::upcase(v3Global.opt.traceClassBases().at(format).substr(
+                                 std::string{"Verilated"}.size()))
+                             + "_"} {
+        m_traceClassBase = v3Global.opt.traceClassBases().at(format);
         m_modp = v3Global.rootp()->topModulep();
         // Open output file
         openNextOutputFile();
@@ -894,8 +905,8 @@ class EmitCTrace final : public EmitCFunc {
     ~EmitCTrace() override = default;
 
 public:
-    static std::vector<AstCFile*> main(bool slow) VL_MT_STABLE {
-        EmitCTrace emitCTrace{slow};
+    static std::vector<AstCFile*> main(bool slow, size_t format) VL_MT_STABLE {
+        EmitCTrace emitCTrace{slow, format};
         std::vector<AstCFile*> cfileps = emitCTrace.getAndClearCfileps();
         if (slow) {
             for (AstCFile* const cfilep : emitCTrace.m_emitTypesp->getAndClearCfileps()) {
@@ -949,12 +960,14 @@ void V3EmitC::emitcImp() {
 
         // Emit trace routines (currently they can only exist in the top module)
         if (v3Global.opt.trace() && !v3Global.opt.lintOnly()) {
-            cfiles.emplace_back();
-            std::vector<AstCFile*>& slow = cfiles.back();
-            threadScope.enqueue([&slow] { slow = EmitCTrace::main(/* slow: */ true); });
-            cfiles.emplace_back();
-            std::vector<AstCFile*>& fast = cfiles.back();
-            threadScope.enqueue([&fast] { fast = EmitCTrace::main(/* slow: */ false); });
+            for (size_t format = 0; format < v3Global.opt.traceClassBases().size(); ++format) {
+                cfiles.emplace_back();
+                std::vector<AstCFile*>& slow = cfiles.back();
+                threadScope.enqueue([&slow, format] { slow = EmitCTrace::main(true, format); });
+                cfiles.emplace_back();
+                std::vector<AstCFile*>& fast = cfiles.back();
+                threadScope.enqueue([&fast, format] { fast = EmitCTrace::main(false, format); });
+            }
         }
     }
     // Add files to netlist

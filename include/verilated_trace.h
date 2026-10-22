@@ -192,6 +192,7 @@ private:
         mutable VerilatedMutex m_mutex;  // Mutex for suspension until ready
         std::condition_variable_any m_cv;  // Condition variable for suspension
         bool m_waiting VL_GUARDED_BY(m_mutex) = false;  // Whether a thread is suspended in wait()
+        bool m_callbackDone VL_GUARDED_BY(m_mutex) = false;
 
         void wait();
 
@@ -301,13 +302,16 @@ protected:
     virtual Buffer* getTraceBuffer(uint32_t fidx) = 0;
     virtual void commitTraceBuffer(Buffer*) = 0;
 
-    // Configure sub-class
-    virtual void configure(const VerilatedTraceConfig&) = 0;
+    // Parallel callbacks require independently writable trace buffers.
+    virtual bool supportsParallel() const { return false; }
+
+    static void runDumpCallback(dumpCb_t cb, void* userp, Buffer* bufp) { cb(userp, bufp); }
 
 public:
     //=========================================================================
     // External interface to client code
 
+    static constexpr bool needsTraceMutex() { return true; }
     explicit VerilatedTrace();
     ~VerilatedTrace();
 

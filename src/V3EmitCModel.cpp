@@ -23,6 +23,7 @@
 #include <algorithm>
 #include <functional>
 #include <vector>
+#include <zlib.h>
 
 VL_DEFINE_DEBUG_FUNCTIONS;
 
@@ -526,29 +527,25 @@ class EmitCModel final : public EmitCFunc {
         }
     }
 
-    void emitTraceMethods(AstNodeModule* modp) {
+    void emitTraceInit(AstNodeModule* modp, const string& traceClass) {
         const string topModNameProtected = EmitCUtil::prefixNameProtect(modp);
         const string topTraceName
             = V3OutFormatter::quoteNameControls(v3Global.rootp()->traceLibTopName());
 
-        putSectionDelimiter("Trace configuration");
-
         // Forward declaration
         if (!v3Global.opt.libCreate().empty()) {
             putns(modp, "\nvoid " + topModNameProtected + "__" + protect("trace_init_root") + "("
-                            + topModNameProtected + "* vlSelf, " + v3Global.opt.traceClassBase()
-                            + "* tracep);\n");
+                            + topModNameProtected + "* vlSelf, " + traceClass + "* tracep);\n");
         }
         putns(modp, "\nvoid " + topModNameProtected + "__" + protect("trace_decl_types") + "("
-                        + v3Global.opt.traceClassBase() + "* tracep);\n");
+                        + traceClass + "* tracep);\n");
         putns(modp, "\nvoid " + topModNameProtected + "__" + protect("trace_init_top") + "("
-                        + topModNameProtected + "* vlSelf, " + v3Global.opt.traceClassBase()
-                        + "* tracep);\n");
+                        + topModNameProtected + "* vlSelf, " + traceClass + "* tracep);\n");
 
         // Static helper function
         puts("\n");
         putns(modp, "VL_ATTR_COLD static void " + protect("trace_init") + "(void* voidSelf, "
-                        + v3Global.opt.traceClassBase() + "* tracep, uint32_t code) {\n");
+                        + traceClass + "* tracep, uint32_t code) {\n");
         putsDecoration(modp, "// Callback from tracep->open()\n");
         puts(EmitCUtil::voidSelfAssign(modp));
         puts(EmitCUtil::symClassAssign());
@@ -557,14 +554,25 @@ class EmitCModel final : public EmitCFunc {
         puts("\"Turning on wave traces requires Verilated::traceEverOn(true) call before time "
              "0.\");\n");
         puts("}\n");
-        if (v3Global.opt.traceEnabledVtr()) {
+        if (traceClass == "VerilatedVtr") {
             puts("static const char vdb[] =\n");
             const string& doc = v3Global.vdbDocument();
+            uLongf compressedSize = compressBound(doc.size());
+            std::unique_ptr<unsigned char[]> compressed{new unsigned char[compressedSize]};
+            const int status = compress2(compressed.get(), &compressedSize,
+                                         reinterpret_cast<const Bytef*>(doc.data()), doc.size(),
+                                         Z_DEFAULT_COMPRESSION);
+            UASSERT(status == Z_OK, "Cannot compress elaboration metadata");
             static constexpr size_t VDB_LITERAL_CHUNK = 4096;
-            for (size_t offset = 0; offset < doc.size(); offset += VDB_LITERAL_CHUNK) {
-                puts("\"" + V3OutFormatter::quoteNameControls(doc.substr(offset, VDB_LITERAL_CHUNK)) + "\"\n");
+            for (size_t offset = 0; offset < compressedSize; offset += VDB_LITERAL_CHUNK) {
+                const string literal = V3OutFormatter::quoteNameControls(
+                    string{reinterpret_cast<const char*>(compressed.get()) + offset,
+                           std::min(VDB_LITERAL_CHUNK, compressedSize - offset)});
+                ofp()->putsNoTracking("\"" + VString::replaceSubstr(literal, "?", "\\077")
+                                     + "\"\n");
             }
-            puts(";\ntracep->declVdb(\"" + v3Global.vdbId() + "\", vdb, vlSymsp->name());\n");
+            puts(";\ntracep->declVdb(\"" + v3Global.vdbId() + "\", vdb, sizeof(vdb) - 1, "
+                 + cvtToStr(doc.size()) + "ULL, vlSymsp->name());\n");
         }
         puts("vlSymsp->__Vm_baseCode = code;\n");
         if (v3Global.opt.libCreate().empty()) {
@@ -592,9 +600,14 @@ class EmitCModel final : public EmitCFunc {
         // Forward declaration
         puts("\n");
         putns(modp, "VL_ATTR_COLD void " + topModNameProtected + "__" + protect("trace_register")
-                        + "(" + topModNameProtected + "* vlSelf, " + v3Global.opt.traceClassBase()
-                        + "* tracep);\n");
+                        + "(" + topModNameProtected + "* vlSelf, " + traceClass + "* tracep);\n");
+    }
 
+    void emitTraceMethods(AstNodeModule* modp) {
+        putSectionDelimiter("Trace configuration");
+        for (const string& traceClass : v3Global.opt.traceClassBases())
+            emitTraceInit(modp, traceClass);
+        const string topModNameProtected = EmitCUtil::prefixNameProtect(modp);
         // ::traceRegisterModel
         puts("\n");
         putns(modp, "VL_ATTR_COLD void " + EmitCUtil::topClassName() + "::traceBaseModel(");
@@ -608,25 +621,23 @@ class EmitCModel final : public EmitCFunc {
             puts(/**/ "}");
         }
         puts(/**/ "(void)levels; (void)options;\n");  // Prevent unused variable warning
-        puts(/**/ v3Global.opt.traceClassBase() + "C* const stfp = dynamic_cast<"
-             + v3Global.opt.traceClassBase() + "C*>(tfp);\n");
-        puts(/**/ "if (VL_UNLIKELY(!stfp)) {\n");
-        puts(/****/ "vl_fatal(__FILE__, __LINE__, __FILE__,\"'" + EmitCUtil::topClassName()
-             + "::trace()' called on non-" + v3Global.opt.traceClassBase() + "C object;\"\n"
-             + "\" use --trace-fst with VerilatedFst object,"
-             + " --trace-vcd with VerilatedVcd object,"
-             + " and --trace-vtr with VerilatedVtr object\");\n");
-        puts(/**/ "}\n");
-        puts(/**/ "stfp->spTrace()->addModel(this);\n");
-        puts(/**/ "stfp->spTrace()->addInitCb("s  //
-             + "&" + protect("trace_init")  //
-             + ", &(vlSymsp->TOP)"  //
-             + ", name()"  //
-             + ", " + (v3Global.opt.libCreate().empty() ? "false" : "true")  //
-             + ", " + std::to_string(v3Global.rootp()->nTraceCodes())  //
-             + ");\n");
-        puts(/**/ topModNameProtected + "__" + protect("trace_register")
-             + "(&(vlSymsp->TOP), stfp->spTrace());\n");
+        for (const string& traceClass : v3Global.opt.traceClassBases()) {
+            puts("if (" + traceClass + "C* const stfp = dynamic_cast<" + traceClass
+                 + "C*>(tfp)) {\n");
+            puts(/**/ "stfp->spTrace()->addModel(this);\n");
+            puts(/**/ "stfp->spTrace()->addInitCb("s  //
+                 + "&" + protect("trace_init")  //
+                 + ", &(vlSymsp->TOP)"  //
+                 + ", name()"  //
+                 + ", " + (v3Global.opt.libCreate().empty() ? "false" : "true")  //
+                 + ", " + std::to_string(v3Global.rootp()->nTraceCodes())  //
+                 + ");\n");
+            puts(/**/ topModNameProtected + "__" + protect("trace_register")
+                 + "(&(vlSymsp->TOP), stfp->spTrace());\n");
+            puts("return;\n}\n");
+        }
+        puts("vl_fatal(__FILE__, __LINE__, __FILE__,\"Trace object format was not enabled when "
+             "this model was generated\");\n");
         puts("}\n");
     }
 

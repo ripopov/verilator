@@ -14,22 +14,18 @@
 /// \file
 /// \brief The vtr_trace SystemVerilog package over the Verilator VTR sink
 ///
-/// The package (include/vtr/vtr_trace.sv) is parsed automatically with
-/// --trace-vtr; its DPI bodies (include/vtr/vtr_trace_dpi.hpp) are written
-/// against a sink interface that this file implements over VerilatedVtr.
-/// Both files are installed from the VTR revision the fork was built with.
+/// The vtr_trace package's DPI bodies use the sink implemented here over
+/// VerilatedVtr. VTR_INCLUDE selects the installed SDK headers.
 ///
 //=============================================================================
 
 #include "verilated.h"
 #include "verilated_vtr_c.h"
 
-#include "vtr/vtr_trace_dpi.hpp"
+#include "vtr_trace_dpi.h"
 
 #include <cmath>
-#include <map>
 #include <memory>
-#include <mutex>
 
 namespace {
 
@@ -49,38 +45,34 @@ public:
     }
 };
 
-struct ContextRuntime final {
-    ContextHost host;
-    vtr_trace::Runtime runtime;
-    explicit ContextRuntime(VerilatedContext* contextp)
-        : host{contextp}
-        , runtime{host} {}
-};
-
-std::mutex s_mutex;  // Guards s_runtimes
-std::map<const VerilatedContext*, std::unique_ptr<ContextRuntime>> s_runtimes;
-
-vtr_trace::Runtime& runtimeOf(VerilatedContext* contextp) {
-    const std::lock_guard<std::mutex> lock{s_mutex};
-    std::unique_ptr<ContextRuntime>& entryp = s_runtimes[contextp];
-    if (!entryp) entryp.reset(new ContextRuntime{contextp});
-    return entryp->runtime;
-}
-
 }  // namespace
 
-vtr_trace::Runtime& vtr_trace::runtime() {
-    // Every package call lands here: remember the calling thread's last context, so the
-    // global map and its mutex are only consulted when that context changes.
-    // Runtimes are never destroyed, so the pointer stays valid.
-    static thread_local const VerilatedContext* t_contextp = nullptr;
-    static thread_local vtr_trace::Runtime* t_runtimep = nullptr;
-    VerilatedContext* const contextp = Verilated::threadContextp();
-    if (VL_UNLIKELY(contextp != t_contextp)) {
-        t_runtimep = &runtimeOf(contextp);
-        t_contextp = contextp;
+class VerilatedVtrRuntime final : public VerilatedVirtualBase {
+    ContextHost m_host;
+    vtr_trace::Runtime m_runtime;
+    explicit VerilatedVtrRuntime(VerilatedContext* contextp)
+        : m_host{contextp}
+        , m_runtime{m_host} {}
+
+public:
+    static vtr_trace::Runtime& of(VerilatedContext* contextp) {
+        auto& owner = contextp->m_vtrRuntimep;
+        if (!owner) owner.reset(new VerilatedVtrRuntime{contextp});
+        return static_cast<VerilatedVtrRuntime*>(owner.get())->m_runtime;
     }
-    return *t_runtimep;
+    static void abandon(VerilatedContext* contextp) noexcept {
+        if (contextp->m_vtrRuntimep)
+            static_cast<VerilatedVtrRuntime*>(contextp->m_vtrRuntimep.get())->m_runtime.abandon();
+    }
+};
+
+vtr_trace::Runtime& vtr_trace::runtime() {
+    return VerilatedVtrRuntime::of(Verilated::threadContextp());
+}
+
+void vtr_trace::failure(const char* message) {
+    VL_FATAL_MT(__FILE__, __LINE__, "", message);
+    std::abort();
 }
 
 //=============================================================================
@@ -94,22 +86,32 @@ public:
     VerilatedVtrPackageSink(VerilatedVtr& trace, VerilatedContext* contextp)
         : m_trace{trace}
         , m_contextp{contextp} {}
-    vtr_writer* writer() override { return m_trace.m_vtr; }
+    vtr::Writer& writer() override { return *m_trace.m_vtr; }
+    void enter(uint64_t time) override { m_trace.enterRecording(time); }
+    void leave() noexcept override { m_trace.leaveRecording(); }
     int timescale() override {
         return static_cast<int>(std::lround(std::log10(m_trace.timeRes())));
     }
-    uint32_t scopeNode(const std::string& path) override { return m_trace.scopeNode(path); }
+    std::optional<vtr::ScopeId> scopeNode(const std::string& path) override {
+        return m_trace.scopeNode(path);
+    }
     void warn(const std::string& text) override { m_trace.warn(text); }
 };
 
 void VerilatedVtr::packageOpened() {
     if (m_packagep || !m_vtr) return;
     m_packagep = new VerilatedVtrPackageSink{*this, m_logContextp};
-    runtimeOf(m_logContextp).opened(*m_packagep);
+    VerilatedVtrRuntime::of(m_logContextp).opened(*m_packagep);
 }
 
 void VerilatedVtr::packageClosing() {
     if (!m_packagep) return;
-    runtimeOf(m_packagep->m_contextp).closing();
+    VerilatedVtrRuntime::of(m_packagep->m_contextp).closing();
+    VL_DO_CLEAR(delete m_packagep, m_packagep = nullptr);
+}
+
+void VerilatedVtr::packageAbandon() noexcept {
+    if (!m_packagep) return;
+    VerilatedVtrRuntime::abandon(m_packagep->m_contextp);
     VL_DO_CLEAR(delete m_packagep, m_packagep = nullptr);
 }

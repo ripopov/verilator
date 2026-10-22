@@ -483,7 +483,7 @@ class TraceDeclVisitor final : public VNVisitor {
     }
     void newDeclFunc(AstNodeDType* nodep) {
         AstNodeDType* const skipTypep = nodep->skipRefp();
-        // offset and direction args added in EmitCImp
+        // Code offsets and directions are bound after trace code allocation.
         std::string callArgs{"tracep, \"" + VIdProtect::protect(m_traName) + "\""};
         VL_RESTORER(m_traName);
         FileLine* const flp = skipTypep->fileline();

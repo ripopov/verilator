@@ -247,25 +247,31 @@ template <>
 void VerilatedTrace<VL_SUB_T, VL_BUF_T>::parallelWorkerTask(void* datap, bool) {
     ParallelWorkerData* const wdp = reinterpret_cast<ParallelWorkerData*>(datap);
     // Run the task
-    wdp->m_cb(wdp->m_userp, wdp->m_bufp);
-    // Mark buffer as ready
-    const VerilatedLockGuard lock{wdp->m_mutex};
-    wdp->m_ready.store(true);
-    if (wdp->m_waiting) wdp->m_cv.notify_one();
+    VL_SUB_T::runDumpCallback(wdp->m_cb, wdp->m_userp, wdp->m_bufp);
+    {
+        const VerilatedLockGuard lock{wdp->m_mutex};
+        wdp->m_callbackDone = true;
+        if (wdp->m_waiting) wdp->m_cv.notify_one();
+    }
+    // The coordinator can destroy the work item as soon as completion is visible.
+    wdp->m_ready.store(true, std::memory_order_release);
 }
 
 template <>
 VL_ATTR_NOINLINE void VerilatedTrace<VL_SUB_T, VL_BUF_T>::ParallelWorkerData::wait() {
     // Spin for a while, waiting for the buffer to become ready
     for (int i = 0; i < VL_LOCK_SPINS; ++i) {
-        if (VL_LIKELY(m_ready.load(std::memory_order_relaxed))) return;
+        if (VL_LIKELY(m_ready.load(std::memory_order_acquire))) return;
         VL_CPU_RELAX();
     }
     // We have been spinning for a while, so yield the thread
-    VerilatedLockGuard lock{m_mutex};
-    m_waiting = true;
-    m_cv.wait(m_mutex, [this] { return m_ready.load(std::memory_order_relaxed); });
-    m_waiting = false;
+    {
+        VerilatedLockGuard lock{m_mutex};
+        m_waiting = true;
+        m_cv.wait(m_mutex, [this]() VL_REQUIRES(m_mutex) { return m_callbackDone; });
+        m_waiting = false;
+    }
+    while (!m_ready.load(std::memory_order_acquire)) VL_CPU_RELAX();
 }
 
 template <>
@@ -312,21 +318,19 @@ void VerilatedTrace<VL_SUB_T, VL_BUF_T>::runCallbacks(const std::vector<Callback
     // Fall back on sequential execution
     for (const CallbackRecord& cbr : cbVec) {
         Buffer* const traceBufferp = getTraceBuffer(cbr.m_fidx);
-        cbr.m_dumpCb(cbr.m_userp, traceBufferp);
+        VL_SUB_T::runDumpCallback(cbr.m_dumpCb, cbr.m_userp, traceBufferp);
         commitTraceBuffer(traceBufferp);
     }
 }
 
 template <>
 void VerilatedTrace<VL_SUB_T, VL_BUF_T>::dump(uint64_t timeui) VL_MT_SAFE_EXCLUDES(m_mutex) {
-    // Not really VL_MT_SAFE but more VL_MT_UNSAFE_ONE.
-    // This does get the mutex, but if multiple threads are trying to dump
-    // chances are the data being dumped will have other problems
-    std::unique_lock<VerilatedMutex> lock{m_mutex};
+    std::unique_lock<VerilatedMutex> lock{m_mutex, std::defer_lock};
+    if VL_CONSTEXPR_CXX17 (VL_SUB_T::needsTraceMutex()) lock.lock();
     if (VL_UNCOVERABLE(m_didSomeDump && timeui <= m_timeLastDump)) {  // LCOV_EXCL_START
         const uint64_t previous = m_timeLastDump;
         // A diagnostic sink may write into this trace. Release its lock first.
-        lock.unlock();
+        if (lock.owns_lock()) lock.unlock();
         VL_PRINTF_MT(3,
                      "%%Warning: previous dump at t=%" PRIu64 ", requesting t=%" PRIu64
                      ", dump call ignored\n",
@@ -370,7 +374,8 @@ void VerilatedTrace<VL_SUB_T, VL_BUF_T>::dump(uint64_t timeui) VL_MT_SAFE_EXCLUD
 template <>
 void VerilatedTrace<VL_SUB_T, VL_BUF_T>::addModel(VerilatedModel* modelp)
     VL_MT_SAFE_EXCLUDES(m_mutex) {
-    const VerilatedLockGuard lock{m_mutex};
+    std::unique_lock<VerilatedMutex> lock{m_mutex, std::defer_lock};
+    if VL_CONSTEXPR_CXX17 (VL_SUB_T::needsTraceMutex()) lock.lock();
 
     const bool newModel = m_models.insert(modelp).second;
     VerilatedContext* const contextp = modelp->contextp();
@@ -396,19 +401,16 @@ void VerilatedTrace<VL_SUB_T, VL_BUF_T>::addModel(VerilatedModel* modelp)
     // Get the desired trace config from the model
     const std::unique_ptr<VerilatedTraceConfig> configp = modelp->traceConfig();
 
-    // Configure trace base class
-    // If at least one model requests parallel tracing, then use it
-    m_parallel |= configp->m_useParallel;
-
-    // Configure format-specific sub class
-    configure(*(configp.get()));
+    // A model can request parallel callbacks only from a format that isolates its buffers.
+    m_parallel |= configp->m_useParallel && supportsParallel();
 }
 
 template <>
 void VerilatedTrace<VL_SUB_T, VL_BUF_T>::addCallbackRecord(std::vector<CallbackRecord>& cbVec,
                                                            CallbackRecord&& cbRec)
     VL_MT_SAFE_EXCLUDES(m_mutex) {
-    const VerilatedLockGuard lock{m_mutex};
+    std::unique_lock<VerilatedMutex> lock{m_mutex, std::defer_lock};
+    if VL_CONSTEXPR_CXX17 (VL_SUB_T::needsTraceMutex()) lock.lock();
     cbVec.push_back(cbRec);
 }
 

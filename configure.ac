@@ -640,6 +640,8 @@ AC_SUBST(CFG_LDFLAGS_VERILATED)
 # The pthread library is required by tcmalloc, so add it if it exists. If it
 # does not, the tcmalloc check below will fail anyway, and linking against
 # pthreads is harmless otherwise.
+AC_CHECK_HEADER([zlib.h], [], [AC_MSG_ERROR([zlib development headers are required])])
+AC_SEARCH_LIBS([compress2], [z], [], [AC_MSG_ERROR([zlib is required for embedded design metadata])])
 CFG_LIBS="$LIBS $CFG_LIBS"
 _MY_LDLIBS_CHECK_OPT(CFG_LIBS, -lpthread)
 _MY_LDLIBS_CHECK_OPT(CFG_LIBS, -latomic)

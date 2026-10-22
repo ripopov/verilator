@@ -109,7 +109,15 @@ string EmitCBaseVisitorConst::cFuncArgs(const AstCFunc* nodep) {
     }
     if (!nodep->argTypes().empty()) {
         if (!args.empty()) args += ", ";
-        args += nodep->argTypes();
+        string argTypes = nodep->argTypes();
+        if (nodep->isTrace() && !m_traceClassBase.empty()) {
+            const string primaryClass = v3Global.opt.traceClassBase();
+            const size_t pos = argTypes.find(primaryClass);
+            UASSERT_OBJ(pos == 0 || pos == std::string{"void* voidSelf, "}.size(), nodep,
+                        "Trace function has no leading trace argument");
+            argTypes.replace(pos, primaryClass.size(), m_traceClassBase);
+        }
+        args += argTypes;
     }
     // Might be a user function with argument list.
     for (const AstNode* stmtp = nodep->argsp(); stmtp; stmtp = stmtp->nextp()) {
