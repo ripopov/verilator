@@ -34,16 +34,19 @@ for mode in ('vcd', 'vtr-inline', 'vtr-threaded'):
 for suffix in ('', '.reopen'):
     prefix = Path(test.obj_dir) / ('formats.vcd' + suffix)
     expected = dict(line.split()
-                    for line in Path(str(prefix) + '.values').read_text().splitlines())
+                    for line in Path(str(prefix) +
+                                     '.values').read_text(encoding='utf-8').splitlines())
     for mode in ('vtr-inline', 'vtr-threaded'):
         captured = Path(test.obj_dir) / ('formats.' + mode + suffix)
-        assert Path(str(prefix) + '.values').read_bytes() == Path(str(captured) + '.values').read_bytes()
-        companion = json.loads(Path(str(captured) + '.vdb.json').read_text())
+        assert Path(str(prefix) + '.values').read_bytes() == Path(str(captured) +
+                                                                  '.values').read_bytes()
+        companion = json.loads(Path(str(captured) + '.vdb.json').read_text(encoding='utf-8'))
         binding = companion.pop('trace_binding')
         assert binding['prefix'] == 'TOP' and binding['signals']
-        assert companion == json.loads((Path(test.obj_dir) / ('V' + test.name + '.vdb.json')).read_text())
+        assert companion == json.loads(
+            (Path(test.obj_dir) / ('V' + test.name + '.vdb.json')).read_text(encoding='utf-8'))
     code, time, actual = None, None, {}
-    for line in prefix.read_text().splitlines():
+    for line in prefix.read_text(encoding='utf-8').splitlines():
         match = re.search(r'\$var wire 95 (\S+) wide ', line)
         if match:
             code = match[1]

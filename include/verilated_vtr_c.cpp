@@ -78,13 +78,10 @@ void VerilatedVtr::open(const char* filename) VL_MT_SAFE_EXCLUDES(m_mutex) {
         Super::traceInit();
         if (m_vdbDocumentp) writeVdb(filename);
         m_vdbMapping.clear();
-        const auto scope = m_vtr->scope("simulation_log", {}, {}, {vtr::ScopeKind::generic});
-        const auto severity_key = m_vtr->intern("log.severity");
+        m_logger = m_vtr->logger({.name = "simulation_log"});
         for (uint8_t severity = 0; severity < m_logSites.size(); ++severity)
-            m_logSites[severity] = m_vtr->logs<std::string_view>(
-                {.name = "{}",
-                 .parent = scope,
-                 .metadata = {{severity_key, vtr::Value(std::uint64_t{severity})}}});
+            m_logSites[severity]
+                = m_vtr->callsite<std::string_view>({.format = "{}", .severity = severity});
         m_signalp = new uint32_t[nextCode()]{0};
         for (const auto& entry : m_code2signal) m_signalp[entry.first] = entry.second;
         m_code2signal.clear();
@@ -187,7 +184,7 @@ std::string vdbQuote(const std::string& text) {
 }  // namespace
 
 void VerilatedVtr::declVdb(const char* identityp, const char* documentp, size_t compressedBytes,
-                          uint64_t decodedBytes, const char* prefixp) {
+                           uint64_t decodedBytes, const char* prefixp) {
     if (m_vdbDocumentp) {
         VL_FATAL_MT(__FILE__, __LINE__, "", "A VTR/VDB recording requires one elaborated model");
     }
@@ -221,8 +218,9 @@ void VerilatedVtr::writeVdb(const char* filename) {
     while (status != Z_STREAM_END) {
         if (!stream.avail_in && supplied < m_vdbCompressedBytes) {
             const size_t count = std::min(m_vdbCompressedBytes - supplied,
-                                           size_t{std::numeric_limits<uInt>::max()});
-            stream.next_in = reinterpret_cast<Bytef*>(const_cast<char*>(m_vdbDocumentp + supplied));
+                                          size_t{std::numeric_limits<uInt>::max()});
+            stream.next_in
+                = reinterpret_cast<Bytef*>(const_cast<char*>(m_vdbDocumentp + supplied));
             stream.avail_in = count;
             supplied += count;
         }
@@ -307,7 +305,7 @@ void VerilatedVtr::logCallback(void* data, uint8_t severity, uint64_t time,
         }
         self->enterRecording(time);
         try {
-            self->m_vtr->log_at(*self->m_logSites.at(severity), time, value);
+            self->m_vtr->log_at(*self->m_logger, *self->m_logSites.at(severity), time, value);
         } catch (...) {
             self->leaveRecording();
             throw;
@@ -353,6 +351,7 @@ void VerilatedVtr::close() VL_MT_SAFE_EXCLUDES(m_mutex) {
         m_local2vtrEnum.clear();
         if (m_signalp) VL_DO_CLEAR(delete[] m_signalp, m_signalp = nullptr);
         for (auto& site : m_logSites) site.reset();
+        m_logger.reset();
     } catch (const std::exception& error) { failed(error.what()); }
 }
 
@@ -639,16 +638,12 @@ void VerilatedVtr::runDumpCallback(dumpCb_t cb, void* userp, Buffer* bufp) {
             bufp->m_vtr.use_producer(*bufp->m_producer);
             cb(userp, bufp);
         }
-    } catch (...) {
-        bufp->m_error = std::current_exception();
-    }
+    } catch (...) { bufp->m_error = std::current_exception(); }
     bufp->m_vtr.release_producer();
     if (mainThread) {
         try {
             owner.m_vtr->use_producer(*owner.m_producer);
-        } catch (...) {
-            bufp->m_error = std::current_exception();
-        }
+        } catch (...) { bufp->m_error = std::current_exception(); }
     }
 }
 
