@@ -6,7 +6,8 @@
 
 #include "verilated.h"
 #include "verilated_vtr_c.h"
-#include "vtr_reader.h"
+
+#include "vtr_logging.h"
 
 #include VM_PREFIX_INCLUDE
 
@@ -41,7 +42,7 @@ static void initializeProbe(void* opaque, VerilatedVtr* tracep, uint32_t baseCod
         lane.code = baseCode + 2 * lane.index;
         const std::string name = "callback_probe_" + std::to_string(lane.index);
         tracep->declQuad(lane.code, name.c_str(), -1, VerilatedTraceSigDirection::NONE,
-                        VerilatedTraceSigKind::VAR, VerilatedTraceSigType::LOGIC, 63, 0);
+                         VerilatedTraceSigKind::VAR, VerilatedTraceSigType::LOGIC, 63, 0);
     }
     tracep->popPrefix();
 }
@@ -75,8 +76,9 @@ static void run(vtr::ExecutionMode mode) {
         trace.spTrace()->addChgCb(dumpProbe, lane.index, &lane);
     }
     probe.parallel = mode == vtr::ExecutionMode::threaded && model.threads() > 1;
-    const std::string path = VL_STRINGIFY(TEST_OBJ_DIR) "/dpi-"
-        + std::string{mode == vtr::ExecutionMode::inline_ ? "inline" : "threaded"} + ".vtr";
+    const std::string path
+        = VL_STRINGIFY(TEST_OBJ_DIR) "/dpi-"
+          + std::string{mode == vtr::ExecutionMode::inline_ ? "inline" : "threaded"} + ".vtr";
     trace.open(path.c_str());
     for (unsigned time = 0; time < 128; ++time) {
         probe.time = time;
@@ -91,7 +93,8 @@ static void run(vtr::ExecutionMode mode) {
     const auto stats = trace.stats();
     check(stats.backend_cpu_nanoseconds.has_value(), "Backend CPU counter unavailable");
     if (mode == vtr::ExecutionMode::inline_) {
-        check(!stats.transport.submitted && !stats.encoding.submitted && !*stats.backend_cpu_nanoseconds,
+        check(!stats.transport.submitted && !stats.encoding.submitted
+                  && !*stats.backend_cpu_nanoseconds,
               "Inline tracing used a queue or worker");
     } else {
         check(stats.transport.submitted && stats.transport.submitted == stats.transport.completed
@@ -101,7 +104,8 @@ static void run(vtr::ExecutionMode mode) {
     vtr::Reader reader{path};
     check(reader.validate().missing.empty(), "DPI trace validation failed");
     for (uint32_t lane = 0; lane < 2; ++lane) {
-        const auto signal = reader.find_signal("probe.callback_probe_" + std::to_string(lane) + " [63:0]");
+        const auto signal
+            = reader.find_signal("probe.callback_probe_" + std::to_string(lane) + " [63:0]");
         check(signal.has_value(), "Callback waveform declaration missing");
         uint64_t count = 0;
         reader.changes(*signal, {}, [&](const auto& change) {
@@ -129,7 +133,8 @@ static void run(vtr::ExecutionMode mode) {
             ids.emplace(sequence, record.id());
             check(record.begin() == 2 * sequence + 1
                       && record.end() == (sequence < 62 ? 2 * sequence + 5 : 128)
-                      && record.status() == (sequence < 62 ? vtr::Status::ok : vtr::Status::aborted),
+                      && record.status()
+                             == (sequence < 62 ? vtr::Status::ok : vtr::Status::aborted),
                   "DPI instruction lifetime differs from RTL");
             check(record.stages().size() == (sequence < 63 ? 2U : 1U)
                       && record.events().size() == (sequence < 63 ? 1U : 0U),
@@ -145,7 +150,8 @@ static void run(vtr::ExecutionMode mode) {
             ++children;
             const auto sequence = (record.begin() - 1) / 2;
             check(!(sequence & 1) && record.parent() == ids.at(sequence)
-                      && *record.parent() < record.id(), "DPI parent identity differs from RTL");
+                      && *record.parent() < record.id(),
+                  "DPI parent identity differs from RTL");
             unsigned relations = 0;
             reader.relations(record.id(), vtr::Direction::incoming, [&](const auto& relation) {
                 ++relations;
@@ -158,7 +164,8 @@ static void run(vtr::ExecutionMode mode) {
         return vtr::Flow::next;
     });
     reader.records({.kind = vtr::RecordKind::log}, [&](const auto& record) {
-        if (reader.format_log(record).find("DPI complete 64") != std::string::npos) ++logs;
+        if (vtr::logging::format_log(reader, record).find("DPI complete 64") != std::string::npos)
+            ++logs;
         return vtr::Flow::next;
     });
     check(owners == 64 && children == 32 && logs == 1 && reader.cycle_at(*schedule, 128) == 63,

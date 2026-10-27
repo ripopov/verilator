@@ -24,7 +24,7 @@
 #include "verilated.h"
 #include "verilated_trace.h"
 
-#include "vtr_writer.h"
+#include "vtr_logging.h"
 
 #include <exception>
 #include <map>
@@ -61,7 +61,7 @@ private:
     uint64_t m_recordingTime = 0;
     VerilatedContext* m_logContextp = nullptr;  // Owns the registered sink until close
     std::optional<vtr::Logger> m_logger;
-    std::array<std::optional<vtr::Callsite<std::string_view>>, 6> m_logSites;
+    std::array<std::optional<vtr::PayloadType<std::string_view>>, 6> m_logSites;
     static void logCallback(void* data, uint8_t severity, uint64_t time, const std::string& text);
     VerilatedVtrPackageSink* m_packagep = nullptr;  // vtr_trace package sink while open
     std::map<std::string, vtr::ScopeId> m_scopeNodes;

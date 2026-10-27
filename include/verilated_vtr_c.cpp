@@ -80,8 +80,8 @@ void VerilatedVtr::open(const char* filename) VL_MT_SAFE_EXCLUDES(m_mutex) {
         m_vdbMapping.clear();
         m_logger = m_vtr->logger({.name = "simulation_log"});
         for (uint8_t severity = 0; severity < m_logSites.size(); ++severity)
-            m_logSites[severity]
-                = m_vtr->callsite<std::string_view>({.format = "{}", .severity = severity});
+            m_logSites[severity] = vtr::logging::declare<std::string_view>(
+                *m_vtr, {.format = "{}", .severity = severity});
         m_signalp = new uint32_t[nextCode()]{0};
         for (const auto& entry : m_code2signal) m_signalp[entry.first] = entry.second;
         m_code2signal.clear();
